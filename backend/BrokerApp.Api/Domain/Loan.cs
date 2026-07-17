@@ -20,4 +20,5 @@ public sealed class Loan
     public byte[] RowVersion { get; set; } = [];
 
     public ICollection<LoanAction> Actions { get; set; } = [];
+    public ICollection<LoanNote> Notes { get; set; } = [];
 }

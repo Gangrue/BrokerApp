@@ -1,5 +1,7 @@
 using BrokerApp.Api.Data;
+using BrokerApp.Api.Features.Actions;
 using BrokerApp.Api.Features.Dashboard;
+using BrokerApp.Api.Features.Loans;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,7 +15,9 @@ if (!builder.Environment.IsEnvironment("Testing"))
         options.UseSqlServer(builder.Configuration.GetConnectionString("BrokerApp")));
 }
 builder.Services.AddControllers();
+builder.Services.AddScoped<IActionWorkflowService, ActionWorkflowService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<ILoanService, LoanService>();
 builder.Services.AddSingleton<ISystemClock, SystemClock>();
 
 var app = builder.Build();

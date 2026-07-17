@@ -1,25 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
+import {
+  addActionComment,
+  completeAction,
+  getDashboard,
+  getLoan,
+  getLoans,
+  rescheduleAction,
+} from './api'
+import type {
+  DashboardAction,
+  DashboardSummary,
+  LoanDetail,
+  LoanListItem,
+} from './api'
 import './App.css'
 
-type DashboardAction = {
-  id: string
-  borrowerName: string
-  loanNumber: string
-  title: string
-  section: string
-  bucket: string
-  priority: string
-  dueDate: string
-}
-
-type DashboardSummary = {
-  overdueCount: number
-  dueTodayCount: number
-  upcomingCount: number
-  openActions: DashboardAction[]
-}
-
-type ActionStatus = 'open' | 'completed' | 'rescheduled'
 type WorkspaceView = 'dashboard' | 'loans'
 
 const emptyDashboard: DashboardSummary = {
@@ -35,9 +30,11 @@ const sectionCopy: Record<string, string> = {
   Realtor: 'Realtor follow-up',
 }
 
-const pipelineStages = ['New file', 'Processing', 'Condition review', 'Clear to close']
+function formatDueDate(value: string | null) {
+  if (!value) {
+    return 'Not set'
+  }
 
-function formatDueDate(value: string) {
   const date = new Date(`${value}T00:00:00`)
 
   return new Intl.DateTimeFormat(undefined, {
@@ -47,66 +44,97 @@ function formatDueDate(value: string) {
   }).format(date)
 }
 
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
+function addDays(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00`)
+  date.setDate(date.getDate() + days)
+
+  return date.toISOString().slice(0, 10)
+}
+
 function normalizeBucket(bucket: string) {
   return bucket.toLowerCase().replace(' ', '-')
 }
 
 function App() {
   const [dashboard, setDashboard] = useState<DashboardSummary>(emptyDashboard)
+  const [loans, setLoans] = useState<LoanListItem[]>([])
+  const [loanDetail, setLoanDetail] = useState<LoanDetail | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null)
   const [view, setView] = useState<WorkspaceView>('dashboard')
-  const [actionStatus, setActionStatus] = useState<Record<string, ActionStatus>>({})
-  const [notes, setNotes] = useState<Record<string, string[]>>({})
   const [noteDraft, setNoteDraft] = useState('')
   const [isLoading, setIsLoading] = useState(true)
+  const [isMutating, setIsMutating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
+
+  async function loadWorkspace(preferredActionId?: string | null) {
+    const [dashboardSummary, loanRows] = await Promise.all([
+      getDashboard(),
+      getLoans(),
+    ])
+    setDashboard(dashboardSummary)
+    setLoans(loanRows)
+
+    const nextSelectedActionId = preferredActionId
+      && dashboardSummary.openActions.some((action) => action.id === preferredActionId)
+      ? preferredActionId
+      : dashboardSummary.openActions[0]?.id ?? null
+
+    setSelectedActionId(nextSelectedActionId)
+    return { dashboardSummary, nextSelectedActionId }
+  }
 
   useEffect(() => {
-    const controller = new AbortController()
+    let isMounted = true
 
-    async function loadDashboard() {
+    async function loadInitialState() {
       try {
-        const response = await fetch('/api/v1/dashboard', {
-          signal: controller.signal,
-        })
+        const { dashboardSummary, nextSelectedActionId } = await loadWorkspace()
+        const selectedAction = dashboardSummary.openActions.find((action) => action.id === nextSelectedActionId)
 
-        if (!response.ok) {
-          throw new Error(`Dashboard request failed with ${response.status}`)
+        if (selectedAction) {
+          setLoanDetail(await getLoan(selectedAction.loanNumber))
         }
 
-        const summary = await response.json() as DashboardSummary
-        setDashboard(summary)
-        setSelectedActionId(summary.openActions[0]?.id ?? null)
-        setError(null)
+        if (isMounted) {
+          setError(null)
+        }
       } catch (caughtError) {
-        if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
-          return
+        if (isMounted) {
+          setError(caughtError instanceof Error ? caughtError.message : 'Dashboard request failed')
         }
-
-        setError(caughtError instanceof Error ? caughtError.message : 'Dashboard request failed')
       } finally {
-        setIsLoading(false)
+        if (isMounted) {
+          setIsLoading(false)
+        }
       }
     }
 
-    void loadDashboard()
+    void loadInitialState()
 
-    return () => controller.abort()
+    return () => {
+      isMounted = false
+    }
   }, [])
-
-  const activeActions = useMemo(() => (
-    dashboard.openActions.filter((action) => actionStatus[action.id] !== 'completed')
-  ), [dashboard.openActions, actionStatus])
 
   const filteredActions = useMemo(() => {
     const query = searchTerm.trim().toLowerCase()
 
     if (!query) {
-      return activeActions
+      return dashboard.openActions
     }
 
-    return activeActions.filter((action) =>
+    return dashboard.openActions.filter((action) =>
       [
         action.borrowerName,
         action.loanNumber,
@@ -116,50 +144,101 @@ function App() {
         action.priority,
       ].some((value) => value.toLowerCase().includes(query)),
     )
-  }, [activeActions, searchTerm])
+  }, [dashboard.openActions, searchTerm])
+
+  const filteredLoans = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase()
+
+    if (!query) {
+      return loans
+    }
+
+    return loans.filter((loan) =>
+      [
+        loan.borrowerName,
+        loan.loanNumber,
+        loan.stage,
+        loan.status,
+        loan.priority,
+        loan.nextActionTitle ?? '',
+      ].some((value) => value.toLowerCase().includes(query)),
+    )
+  }, [loans, searchTerm])
 
   const selectedAction = useMemo(() => (
-    activeActions.find((action) => action.id === selectedActionId)
+    dashboard.openActions.find((action) => action.id === selectedActionId)
     ?? filteredActions[0]
-    ?? activeActions[0]
+    ?? dashboard.openActions[0]
     ?? null
-  ), [activeActions, filteredActions, selectedActionId])
+  ), [dashboard.openActions, filteredActions, selectedActionId])
 
-  const visibleCounts = useMemo(() => ({
-    overdue: activeActions.filter((action) => action.bucket === 'Overdue').length,
-    dueToday: activeActions.filter((action) => action.bucket === 'Due Today').length,
-    upcoming: activeActions.filter((action) => action.bucket === 'Upcoming').length,
-  }), [activeActions])
+  useEffect(() => {
+    let isMounted = true
 
-  const pipelineLoans = useMemo(() => (
-    activeActions.map((action, index) => ({
-      loanNumber: action.loanNumber,
-      borrowerName: action.borrowerName,
-      stage: pipelineStages[Math.min(index + 1, pipelineStages.length - 1)],
-      priority: action.priority,
-      nextAction: action.title,
-      dueDate: action.dueDate,
-    }))
-  ), [activeActions])
+    async function loadLoanDetail() {
+      if (!selectedAction) {
+        setLoanDetail(null)
+        return
+      }
 
-  const selectedNotes = selectedAction ? notes[selectedAction.id] ?? [] : []
+      try {
+        const detail = await getLoan(selectedAction.loanNumber)
+
+        if (isMounted) {
+          setLoanDetail(detail)
+        }
+      } catch (caughtError) {
+        if (isMounted) {
+          setError(caughtError instanceof Error ? caughtError.message : 'Loan detail request failed')
+        }
+      }
+    }
+
+    void loadLoanDetail()
+
+    return () => {
+      isMounted = false
+    }
+  }, [selectedAction])
+
+  async function runWorkflow(
+    action: () => Promise<unknown>,
+    message: string,
+    preferredActionId: string | null | undefined = selectedAction?.id,
+  ) {
+    setIsMutating(true)
+    setWorkflowMessage(null)
+    setError(null)
+
+    try {
+      await action()
+      const { dashboardSummary, nextSelectedActionId } = await loadWorkspace(preferredActionId)
+      const nextAction = dashboardSummary.openActions.find((item) => item.id === nextSelectedActionId)
+
+      if (nextAction) {
+        setLoanDetail(await getLoan(nextAction.loanNumber))
+      } else {
+        setLoanDetail(null)
+      }
+
+      setWorkflowMessage(message)
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Workflow request failed')
+    } finally {
+      setIsMutating(false)
+    }
+  }
 
   function completeSelectedAction() {
     if (!selectedAction) {
       return
     }
 
-    setActionStatus((current) => ({
-      ...current,
-      [selectedAction.id]: 'completed',
-    }))
-    setNotes((current) => ({
-      ...current,
-      [selectedAction.id]: [
-        `Completed from dashboard on ${new Date().toLocaleDateString()}.`,
-        ...(current[selectedAction.id] ?? []),
-      ],
-    }))
+    void runWorkflow(
+      () => completeAction(selectedAction.id),
+      `${selectedAction.id} completed.`,
+      null,
+    )
   }
 
   function rescheduleSelectedAction() {
@@ -167,17 +246,11 @@ function App() {
       return
     }
 
-    setActionStatus((current) => ({
-      ...current,
-      [selectedAction.id]: 'rescheduled',
-    }))
-    setNotes((current) => ({
-      ...current,
-      [selectedAction.id]: [
-        'Follow-up rescheduled for review.',
-        ...(current[selectedAction.id] ?? []),
-      ],
-    }))
+    void runWorkflow(
+      () => rescheduleAction(selectedAction.id, addDays(selectedAction.dueDate, 3)),
+      `${selectedAction.id} rescheduled.`,
+      selectedAction.id,
+    )
   }
 
   function addNote() {
@@ -185,14 +258,13 @@ function App() {
       return
     }
 
-    setNotes((current) => ({
-      ...current,
-      [selectedAction.id]: [
-        noteDraft.trim(),
-        ...(current[selectedAction.id] ?? []),
-      ],
-    }))
+    const body = noteDraft.trim()
     setNoteDraft('')
+    void runWorkflow(
+      () => addActionComment(selectedAction.id, body),
+      'Note added to loan file.',
+      selectedAction.id,
+    )
   }
 
   return (
@@ -218,7 +290,7 @@ function App() {
         </nav>
         <div className="sidebar-summary">
           <span>Queue health</span>
-          <strong>{visibleCounts.overdue === 0 ? 'On track' : `${visibleCounts.overdue} overdue`}</strong>
+          <strong>{dashboard.overdueCount === 0 ? 'On track' : `${dashboard.overdueCount} overdue`}</strong>
         </div>
       </aside>
 
@@ -242,25 +314,27 @@ function App() {
         <section className="metrics" aria-label="Action summary">
           <article className="metric-overdue">
             <span>Overdue</span>
-            <strong>{visibleCounts.overdue}</strong>
+            <strong>{dashboard.overdueCount}</strong>
             <small>Past business day</small>
           </article>
           <article className="metric-today">
             <span>Due today</span>
-            <strong>{visibleCounts.dueToday}</strong>
+            <strong>{dashboard.dueTodayCount}</strong>
             <small>Needs officer touch</small>
           </article>
           <article className="metric-upcoming">
             <span>Upcoming</span>
-            <strong>{visibleCounts.upcoming}</strong>
+            <strong>{dashboard.upcomingCount}</strong>
             <small>Within active queue</small>
           </article>
           <article>
             <span>Open queue</span>
-            <strong>{activeActions.length}</strong>
+            <strong>{dashboard.openActions.length}</strong>
             <small>Visible work items</small>
           </article>
         </section>
+
+        {workflowMessage && <p className="state-message success">{workflowMessage}</p>}
 
         {view === 'dashboard' ? (
           <section className="content-grid">
@@ -312,13 +386,13 @@ function App() {
 
             <LoanContextPanel
               action={selectedAction}
-              notes={selectedNotes}
+              detail={loanDetail}
+              disabled={isMutating}
               noteDraft={noteDraft}
               onAddNote={addNote}
               onComplete={completeSelectedAction}
               onDraftChange={setNoteDraft}
               onReschedule={rescheduleSelectedAction}
-              status={selectedAction ? actionStatus[selectedAction.id] : undefined}
             />
           </section>
         ) : (
@@ -326,7 +400,7 @@ function App() {
             <div className="panel-header">
               <div>
                 <h2>Pipeline snapshot</h2>
-                <p>{pipelineLoans.length} active loans</p>
+                <p>{filteredLoans.length} active loans</p>
               </div>
             </div>
             <div className="pipeline-table" role="table" aria-label="Loan pipeline">
@@ -337,13 +411,13 @@ function App() {
                 <span>Next action</span>
                 <span>Due</span>
               </div>
-              {pipelineLoans.map((loan) => (
+              {filteredLoans.map((loan) => (
                 <button
                   className="pipeline-row"
                   key={loan.loanNumber}
                   onClick={() => {
                     setView('dashboard')
-                    setSelectedActionId(activeActions.find((action) => action.loanNumber === loan.loanNumber)?.id ?? null)
+                    setSelectedActionId(dashboard.openActions.find((action) => action.loanNumber === loan.loanNumber)?.id ?? null)
                   }}
                   role="row"
                   type="button"
@@ -351,8 +425,8 @@ function App() {
                   <span>{loan.borrowerName}</span>
                   <span>{loan.loanNumber}</span>
                   <span>{loan.stage}</span>
-                  <span>{loan.nextAction}</span>
-                  <span>{formatDueDate(loan.dueDate)}</span>
+                  <span>{loan.nextActionTitle ?? 'No open action'}</span>
+                  <span>{formatDueDate(loan.nextActionDueDate)}</span>
                 </button>
               ))}
             </div>
@@ -365,22 +439,22 @@ function App() {
 
 function LoanContextPanel({
   action,
-  notes,
+  detail,
+  disabled,
   noteDraft,
   onAddNote,
   onComplete,
   onDraftChange,
   onReschedule,
-  status,
 }: {
   action: DashboardAction | null
-  notes: string[]
+  detail: LoanDetail | null
+  disabled: boolean
   noteDraft: string
   onAddNote: () => void
   onComplete: () => void
   onDraftChange: (value: string) => void
   onReschedule: () => void
-  status?: ActionStatus
 }) {
   if (!action) {
     return (
@@ -409,18 +483,22 @@ function LoanContextPanel({
           <dd>{formatDueDate(action.dueDate)}</dd>
         </div>
         <div>
-          <dt>Priority</dt>
-          <dd>{action.priority}</dd>
+          <dt>Loan stage</dt>
+          <dd>{detail?.stage ?? 'Loading'}</dd>
         </div>
         <div>
-          <dt>Prototype status</dt>
-          <dd>{status === 'rescheduled' ? 'Rescheduled' : 'Ready for review'}</dd>
+          <dt>Target close</dt>
+          <dd>{formatDueDate(detail?.targetCloseDate ?? null)}</dd>
+        </div>
+        <div>
+          <dt>Borrower email</dt>
+          <dd>{detail?.borrowerEmail ?? 'Not available'}</dd>
         </div>
       </dl>
 
       <div className="workflow-actions">
-        <button type="button" onClick={onComplete}>Complete</button>
-        <button className="secondary" type="button" onClick={onReschedule}>Reschedule</button>
+        <button disabled={disabled} type="button" onClick={onComplete}>Complete</button>
+        <button className="secondary" disabled={disabled} type="button" onClick={onReschedule}>Reschedule</button>
       </div>
 
       <div className="note-box">
@@ -432,13 +510,26 @@ function LoanContextPanel({
           rows={4}
           value={noteDraft}
         />
-        <button className="secondary" type="button" onClick={onAddNote}>Add note</button>
+        <button className="secondary" disabled={disabled || !noteDraft.trim()} type="button" onClick={onAddNote}>Add note</button>
       </div>
 
       <div className="activity-feed">
-        <h3>Recent activity</h3>
-        {(notes.length > 0 ? notes : ['Loan opened from dashboard.', 'Awaiting next condition update.']).map((note, index) => (
-          <p key={`${note}-${index}`}>{note}</p>
+        <h3>Recent notes</h3>
+        {(detail?.notes.length ? detail.notes : [{ body: 'No notes yet.', createdAtUtc: new Date().toISOString() }]).map((note, index) => (
+          <p key={`${note.createdAtUtc}-${index}`}>
+            <strong>{formatDateTime(note.createdAtUtc)}</strong>
+            <span>{note.body}</span>
+          </p>
+        ))}
+      </div>
+
+      <div className="activity-feed">
+        <h3>History</h3>
+        {(detail?.history.length ? detail.history : []).slice(0, 4).map((event) => (
+          <p key={`${event.actionId}-${event.occurredAtUtc}`}>
+            <strong>{formatDateTime(event.occurredAtUtc)}</strong>
+            <span>{event.actionId}: {event.eventType}</span>
+          </p>
         ))}
       </div>
     </aside>

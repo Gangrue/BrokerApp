@@ -62,6 +62,24 @@ internal static class DashboardTestData
             CreateAction("50000000-0000-0000-0000-000000000102", loan.Id, "ACT-TODAY", today, ActionWorkflowStatuses.Open, now),
             CreateAction("50000000-0000-0000-0000-000000000103", loan.Id, "ACT-UPCOMING", today.AddDays(1), ActionWorkflowStatuses.Open, now),
             CreateAction("50000000-0000-0000-0000-000000000104", loan.Id, "ACT-DONE", today.AddDays(-2), ActionWorkflowStatuses.Completed, now));
+        dbContext.Add(new LoanNote
+        {
+            Id = Guid.Parse("60000000-0000-0000-0000-000000000101"),
+            OrganizationId = DevDataIds.OrganizationId,
+            LoanId = loan.Id,
+            CreatedByUserId = DevDataIds.LoanOfficerId,
+            Body = "Initial test note.",
+            CreatedAtUtc = now
+        });
+        dbContext.Add(new ActionEvent
+        {
+            Id = Guid.Parse("70000000-0000-0000-0000-000000000101"),
+            LoanActionId = Guid.Parse("50000000-0000-0000-0000-000000000101"),
+            EventType = ActionEventTypes.Created,
+            ActorUserId = DevDataIds.LoanOfficerId,
+            Reason = "Created by test seed.",
+            OccurredAtUtc = now
+        });
 
         await dbContext.SaveChangesAsync();
     }

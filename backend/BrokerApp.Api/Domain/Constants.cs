@@ -20,6 +20,14 @@ public static class ActionWorkflowStatuses
     public const string Cancelled = "Cancelled";
 }
 
+public static class ActionEventTypes
+{
+    public const string Completed = "Completed";
+    public const string Rescheduled = "Rescheduled";
+    public const string CommentAdded = "Comment Added";
+    public const string Created = "Created";
+}
+
 public static class UserRoles
 {
     public const string LoanOfficer = "Loan Officer";

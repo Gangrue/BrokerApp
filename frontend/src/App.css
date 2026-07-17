@@ -150,6 +150,11 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 button.secondary {
   background: #244e60;
 }
@@ -315,6 +320,13 @@ textarea {
   color: #9f2d20;
 }
 
+.state-message.success {
+  margin-bottom: 16px;
+  border-color: #a7d6c1;
+  background: #f0fbf6;
+  color: #176145;
+}
+
 .status {
   display: inline-flex;
   justify-content: center;
@@ -401,6 +413,8 @@ textarea {
 }
 
 .activity-feed p {
+  display: grid;
+  gap: 4px;
   margin: 0;
   padding: 10px;
   border-left: 3px solid #bed0d8;
@@ -408,6 +422,10 @@ textarea {
   color: #40505a;
   border-radius: 0 7px 7px 0;
   font-size: 13px;
+}
+
+.activity-feed strong {
+  color: #17242c;
 }
 
 .pipeline-panel {
