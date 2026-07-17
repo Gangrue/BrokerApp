@@ -43,9 +43,11 @@ import type {
   UpsertActionTemplateRequest,
   UserListItem,
 } from './api'
+import familyImage from './assets/FamilyImage.png'
+import piggyImage from './assets/PiggyImage.webp'
 import './App.css'
 
-type WorkspaceView = 'dashboard' | 'loans' | 'customers' | 'reports' | 'admin' | 'account' | 'intake'
+type WorkspaceView = 'home' | 'dashboard' | 'actionDetail' | 'loans' | 'loanDetail' | 'customers' | 'customerDetail' | 'reports' | 'admin' | 'account' | 'intake'
 type QueueFilter = 'all' | 'overdue' | 'today' | 'high'
 type BorrowerMode = 'new' | 'existing'
 
@@ -159,12 +161,28 @@ const sectionCopy: Record<string, string> = {
   Realtor: 'Realtor follow-up',
 }
 
+const homeHeroSlides = [
+  {
+    alt: 'Family sitting together outside a home',
+    description: 'Keep borrower, title, realtor, and loan officer work organized around the people behind each file.',
+    image: familyImage,
+    title: 'A clearer path from intake to closing',
+  },
+  {
+    alt: 'Piggy bank and savings concept',
+    description: 'Track ICD state, closing dates, open conditions, and follow-up actions before they become urgent.',
+    image: piggyImage,
+    title: 'Protect every deadline and detail',
+  },
+]
+
 const loanTypes = ['Purchase', 'Refinance', 'HELOC']
 const loanStages = ['New file', 'Processing', 'Condition review', 'Clear to close']
 const loanStatuses = ['Draft', 'Active', 'On Hold', 'Closed', 'Canceled']
 const customerStatuses = ['Active', 'Archived']
 const actionSections = ['Borrower', 'Title', 'Realtor']
 const actionPriorities = ['Normal', 'High']
+const listPageSize = 8
 
 function formatDueDate(value: string | null) {
   if (!value) {
@@ -222,6 +240,31 @@ function addDays(value: string, days: number) {
 
 function normalizeBucket(bucket: string) {
   return bucket.toLowerCase().replace(' ', '-')
+}
+
+function itemDomId(prefix: string, value: string) {
+  return `${prefix}-${value.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+}
+
+function scrollWorkspaceToTop() {
+  window.requestAnimationFrame(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  })
+}
+
+function scrollWorkspaceItemIntoView(prefix: string, value: string | null) {
+  if (!value) {
+    return
+  }
+
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      document.getElementById(itemDomId(prefix, value))?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    })
+  })
 }
 
 function emptyIntakeAction(): IntakeActionForm {
@@ -394,7 +437,7 @@ function App() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
   const [selectedLoanNumber, setSelectedLoanNumber] = useState<string | null>(null)
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
-  const [view, setView] = useState<WorkspaceView>('dashboard')
+  const [view, setView] = useState<WorkspaceView>('home')
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('all')
   const [noteDraft, setNoteDraft] = useState('')
   const [rescheduleDate, setRescheduleDate] = useState('')
@@ -420,6 +463,10 @@ function App() {
   const [isSavingLoan, setIsSavingLoan] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+  const [actionPage, setActionPage] = useState(0)
+  const [customerPage, setCustomerPage] = useState(0)
+  const [loanPage, setLoanPage] = useState(0)
 
   async function loadWorkspace(preferredActionId?: string | null) {
     const [dashboardSummary, loanRows, customerRows, reportRows, templateRows, userRows, activeUser] = await Promise.all([
@@ -596,6 +643,101 @@ function App() {
     ?? null
   ), [filteredTemplates, selectedTemplateId])
 
+  const actionPageCount = Math.max(1, Math.ceil(filteredActions.length / listPageSize))
+  const currentActionPage = Math.min(actionPage, actionPageCount - 1)
+  const pagedActions = filteredActions.slice(currentActionPage * listPageSize, currentActionPage * listPageSize + listPageSize)
+  const customerPageCount = Math.max(1, Math.ceil(filteredCustomers.length / listPageSize))
+  const currentCustomerPage = Math.min(customerPage, customerPageCount - 1)
+  const pagedCustomers = filteredCustomers.slice(currentCustomerPage * listPageSize, currentCustomerPage * listPageSize + listPageSize)
+  const loanPageCount = Math.max(1, Math.ceil(filteredLoans.length / listPageSize))
+  const currentLoanPage = Math.min(loanPage, loanPageCount - 1)
+  const pagedLoans = filteredLoans.slice(currentLoanPage * listPageSize, currentLoanPage * listPageSize + listPageSize)
+  const searchPlaceholder = view === 'dashboard'
+    ? 'Search Dashboard'
+    : view === 'loans'
+      ? 'Search Loans'
+      : view === 'customers'
+        ? 'Search Borrowers'
+        : null
+
+  useEffect(() => {
+    setActionPage(0)
+    setCustomerPage(0)
+    setLoanPage(0)
+  }, [searchTerm])
+
+  useEffect(() => {
+    setActionPage(0)
+  }, [queueFilter, dashboard.openActions.length])
+
+  useEffect(() => {
+    setCustomerPage(0)
+  }, [customers.length])
+
+  useEffect(() => {
+    setLoanPage(0)
+  }, [loans.length])
+
+  function pageForIndex(index: number) {
+    return index < 0 ? 0 : Math.floor(index / listPageSize)
+  }
+
+  function openSidebarView(nextView: WorkspaceView) {
+    setSearchTerm('')
+    setView(nextView)
+  }
+
+  function openActionDetail() {
+    setView('actionDetail')
+    scrollWorkspaceToTop()
+  }
+
+  function backToDashboardAction() {
+    setActionPage(pageForIndex(filteredActions.findIndex((action) => action.id === selectedActionId)))
+    setView('dashboard')
+    scrollWorkspaceItemIntoView('action', selectedActionId)
+  }
+
+  function openDashboardAction(actionId: string) {
+    setSelectedActionId(actionId)
+    setActionPage(pageForIndex(filteredActions.findIndex((action) => action.id === actionId)))
+    setView('dashboard')
+    scrollWorkspaceItemIntoView('action', actionId)
+  }
+
+  function openLoanPipeline(loanNumber: string) {
+    setSelectedLoanNumber(loanNumber)
+    setLoanPage(pageForIndex(filteredLoans.findIndex((loan) => loan.loanNumber === loanNumber)))
+    setView('loans')
+    scrollWorkspaceItemIntoView('loan', loanNumber)
+  }
+
+  function openLoanDetail(loanNumber: string) {
+    setSelectedLoanNumber(loanNumber)
+    setView('loanDetail')
+    scrollWorkspaceToTop()
+  }
+
+  function backToLoanPipeline() {
+    const loanNumber = loanDetail?.loanNumber ?? selectedLoanNumber
+    setLoanPage(pageForIndex(filteredLoans.findIndex((loan) => loan.loanNumber === loanNumber)))
+    setView('loans')
+    scrollWorkspaceItemIntoView('loan', loanNumber)
+  }
+
+  function openCustomerDetail(customerId: string) {
+    setSelectedCustomerId(customerId)
+    setView('customerDetail')
+    scrollWorkspaceToTop()
+  }
+
+  function backToCustomers() {
+    const customerId = customerDetail?.id ?? selectedCustomerId
+    setCustomerPage(pageForIndex(filteredCustomers.findIndex((customer) => customer.id === customerId)))
+    setView('customers')
+    scrollWorkspaceItemIntoView('customer', customerId)
+  }
+
   useEffect(() => {
     setEmailDraft(null)
     setIsEmailSendConfirmOpen(false)
@@ -654,12 +796,18 @@ function App() {
     let isMounted = true
 
     async function loadSelectedLoanDetail() {
-      if (view !== 'loans' || !selectedLoan) {
+      const loanNumber = view === 'loans'
+        ? selectedLoan?.loanNumber
+        : view === 'loanDetail'
+          ? selectedLoanNumber
+          : null
+
+      if (!loanNumber) {
         return
       }
 
       try {
-        const detail = await getLoan(selectedLoan.loanNumber)
+        const detail = await getLoan(loanNumber)
 
         if (isMounted) {
           setLoanDetail(detail)
@@ -676,7 +824,7 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [selectedLoan, view])
+  }, [selectedLoan?.loanNumber, selectedLoanNumber, view])
 
   useEffect(() => {
     if (!loanDetail) {
@@ -705,13 +853,13 @@ function App() {
     let isMounted = true
 
     async function loadCustomerDetail() {
-      if (view !== 'customers' || !selectedCustomer) {
+      if ((view !== 'customers' && view !== 'customerDetail') || !selectedCustomerId) {
         setCustomerDetail(null)
         return
       }
 
       try {
-        const detail = await getCustomer(selectedCustomer.id)
+        const detail = await getCustomer(selectedCustomerId)
 
         if (isMounted) {
           setCustomerDetail(detail)
@@ -728,7 +876,7 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [selectedCustomer, view])
+  }, [selectedCustomerId, view])
 
   useEffect(() => {
     if (!customerDetail) {
@@ -978,11 +1126,11 @@ function App() {
   function submitLoanPageAction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!selectedLoan || !followUpAction.title.trim() || !followUpAction.dueDate) {
+    const loanNumber = selectedLoan?.loanNumber ?? loanDetail?.loanNumber ?? selectedLoanNumber
+
+    if (!loanNumber || !followUpAction.title.trim() || !followUpAction.dueDate) {
       return
     }
-
-    const loanNumber = selectedLoan.loanNumber
 
     void (async () => {
       setIsMutating(true)
@@ -1064,7 +1212,9 @@ function App() {
   async function submitCustomerEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!selectedCustomer) {
+    const customerId = selectedCustomer?.id ?? customerDetail?.id
+
+    if (!customerId) {
       return
     }
 
@@ -1073,7 +1223,7 @@ function App() {
     setError(null)
 
     try {
-      const saved = await updateCustomer(selectedCustomer.id, {
+      const saved = await updateCustomer(customerId, {
         firstName: customerEditForm.firstName.trim(),
         lastName: customerEditForm.lastName.trim(),
         email: optionalText(customerEditForm.email),
@@ -1092,11 +1242,11 @@ function App() {
   }
 
   function generateTemplateActionsForSelectedLoan(templateId: string) {
-    if (!selectedAction || !templateId) {
+    const loanNumber = selectedAction?.loanNumber ?? loanDetail?.loanNumber ?? selectedLoanNumber
+
+    if (!loanNumber || !templateId) {
       return
     }
-
-    const loanNumber = selectedAction.loanNumber
 
     void (async () => {
       setIsMutating(true)
@@ -1105,9 +1255,10 @@ function App() {
 
       try {
         const response = await generateLoanActions(loanNumber, templateId)
-        const preferredActionId = response.createdActionIds[0] ?? selectedAction.id
+        const preferredActionId = response.createdActionIds[0] ?? selectedAction?.id ?? null
         await loadWorkspace(preferredActionId)
         setLoanDetail(await getLoan(response.loanNumber))
+        setSelectedLoanNumber(response.loanNumber)
         setSelectedActionId(preferredActionId)
         setWorkflowMessage(
           `${response.createdActionIds.length} action${response.createdActionIds.length === 1 ? '' : 's'} generated, ${response.skippedCount} skipped.`,
@@ -1308,7 +1459,9 @@ function App() {
   async function submitCustomerLoan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!selectedCustomer) {
+    const customerId = selectedCustomer?.id ?? customerDetail?.id
+
+    if (!customerId) {
       return
     }
 
@@ -1317,7 +1470,7 @@ function App() {
     setError(null)
 
     try {
-      const response = await createCustomerLoan(selectedCustomer.id, buildCustomerLoanRequest(customerLoanForm))
+      const response = await createCustomerLoan(customerId, buildCustomerLoanRequest(customerLoanForm))
       const preferredActionId = response.createdActionIds[0] ?? null
       await loadWorkspace(preferredActionId)
       setLoanDetail(await getLoan(response.loanNumber))
@@ -1338,33 +1491,52 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <aside className="sidebar" aria-label="Primary">
-        <div className="brand">
+        <button
+          aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="sidebar-toggle"
+          title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          type="button"
+          onClick={() => setIsSidebarCollapsed((current) => !current)}
+        >
+          {isSidebarCollapsed ? '>' : '<'}
+        </button>
+        <button className="brand" type="button" onClick={() => openSidebarView('home')}>
           <span className="brand-mark">BA</span>
           <span>
             <strong>Broker App</strong>
             <small>Loan workflow</small>
           </span>
-        </div>
+        </button>
         <nav>
-          <button className={view === 'dashboard' ? 'active' : ''} type="button" onClick={() => setView('dashboard')}>
-            Dashboard
+          <button className={view === 'home' ? 'active' : ''} title="Home" type="button" onClick={() => openSidebarView('home')}>
+            <span>H</span>
+            <strong>Home</strong>
           </button>
-          <button className={view === 'loans' ? 'active' : ''} type="button" onClick={() => setView('loans')}>
-            Loans
+          <button className={view === 'dashboard' || view === 'actionDetail' ? 'active' : ''} title="Dashboard" type="button" onClick={() => openSidebarView('dashboard')}>
+            <span>D</span>
+            <strong>Dashboard</strong>
           </button>
-          <button className={view === 'customers' ? 'active' : ''} type="button" onClick={() => setView('customers')}>
-            Customers
+          <button className={view === 'loans' || view === 'loanDetail' ? 'active' : ''} title="Loans" type="button" onClick={() => openSidebarView('loans')}>
+            <span>L</span>
+            <strong>Loans</strong>
           </button>
-          <button className={view === 'reports' ? 'active' : ''} type="button" onClick={() => setView('reports')}>
-            Reports
+          <button className={view === 'customers' || view === 'customerDetail' ? 'active' : ''} title="Customers" type="button" onClick={() => openSidebarView('customers')}>
+            <span>C</span>
+            <strong>Customers</strong>
           </button>
-          <button className={view === 'admin' ? 'active' : ''} type="button" onClick={() => setView('admin')}>
-            Admin
+          <button className={view === 'reports' ? 'active' : ''} title="Reports" type="button" onClick={() => openSidebarView('reports')}>
+            <span>R</span>
+            <strong>Reports</strong>
           </button>
-          <button className={view === 'account' ? 'active' : ''} type="button" onClick={() => setView('account')}>
-            My Account
+          <button className={view === 'admin' ? 'active' : ''} title="Admin" type="button" onClick={() => openSidebarView('admin')}>
+            <span>A</span>
+            <strong>Admin</strong>
+          </button>
+          <button className={view === 'account' ? 'active' : ''} title="My Account" type="button" onClick={() => openSidebarView('account')}>
+            <span>M</span>
+            <strong>My Account</strong>
           </button>
         </nav>
         <div className="sidebar-footer">
@@ -1381,11 +1553,15 @@ function App() {
       <section className="workspace" id="dashboard">
         <header className="topbar">
           <div>
-            <p className="eyebrow">{view === 'intake' ? 'File intake' : 'Daily workflow'}</p>
+            <p className="eyebrow">{view === 'intake' ? 'File intake' : view === 'home' ? 'Workspace home' : 'Daily workflow'}</p>
             <h1>
+              {view === 'home' && 'Home'}
               {view === 'dashboard' && 'Processing dashboard'}
+              {view === 'actionDetail' && 'Action detail'}
               {view === 'loans' && 'Loan pipeline'}
+            {view === 'loanDetail' && 'Loan details'}
             {view === 'customers' && 'Customers'}
+            {view === 'customerDetail' && 'Customer details'}
             {view === 'reports' && 'Reports'}
             {view === 'admin' && 'Admin templates'}
             {view === 'account' && 'My Account'}
@@ -1397,19 +1573,21 @@ function App() {
               <button className="secondary" type="button" onClick={() => setView('dashboard')}>Cancel intake</button>
             ) : (
               <>
-                <input
-                  aria-label="Search loans and actions"
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Search loans or borrowers"
-                  value={searchTerm}
-                />
+                {searchPlaceholder && (
+                  <input
+                    aria-label={searchPlaceholder}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    placeholder={searchPlaceholder}
+                    value={searchTerm}
+                  />
+                )}
                 <button type="button" onClick={() => setView('intake')}>New Intake</button>
               </>
             )}
           </div>
         </header>
 
-        {view !== 'intake' && view !== 'account' && (
+        {view !== 'home' && view !== 'intake' && view !== 'account' && view !== 'loanDetail' && view !== 'customerDetail' && view !== 'actionDetail' && (
           <section className="metrics" aria-label="Action summary">
             <article className="metric-overdue">
               <span>Overdue</span>
@@ -1458,24 +1636,31 @@ function App() {
             onUpdateAction={updateIntakeAction}
             onUpdateField={updateIntakeField}
           />
+        ) : view === 'home' ? (
+          <HomePage
+            currentUser={currentUser}
+            dashboard={dashboard}
+            customerCount={customers.length}
+            loanCount={loans.length}
+            onOpenAdmin={() => setView('admin')}
+            onOpenDashboard={() => setView('dashboard')}
+            onOpenIntake={() => setView('intake')}
+            onOpenLoans={() => setView('loans')}
+            recentActivity={reportSummary.recentActivity}
+            templateCount={templates.length}
+          />
         ) : view === 'dashboard' ? (
           <>
           <section className="dashboard-alert-grid">
             <DashboardAlertList
               items={dashboard.closingWithin7Days}
               title="Closing within 7 days"
-              onOpenLoan={(loanNumber) => {
-                setSelectedLoanNumber(loanNumber)
-                setView('loans')
-              }}
+              onOpenLoan={openLoanPipeline}
             />
             <DashboardAlertList
               items={dashboard.icdNeedsAttention}
               title="ICD not sent/signed"
-              onOpenLoan={(loanNumber) => {
-                setSelectedLoanNumber(loanNumber)
-                setView('loans')
-              }}
+              onOpenLoan={openLoanPipeline}
             />
           </section>
 
@@ -1509,9 +1694,10 @@ function App() {
               )}
               {!isLoading && !error && filteredActions.length > 0 && (
                 <div className="action-list">
-                  {filteredActions.map((action) => (
+                  {pagedActions.map((action) => (
                     <button
                       className={`action-row ${selectedAction?.id === action.id ? 'selected' : ''}`}
+                      id={itemDomId('action', action.id)}
                       key={action.id}
                       onClick={() => setSelectedActionId(action.id)}
                       type="button"
@@ -1533,46 +1719,78 @@ function App() {
                   ))}
                 </div>
               )}
+              <ListPagination
+                currentPage={currentActionPage}
+                itemLabel="Dashboard actions"
+                onPageChange={setActionPage}
+                pageCount={actionPageCount}
+                totalItems={filteredActions.length}
+              />
             </div>
 
             <LoanContextPanel
               action={selectedAction}
               detail={loanDetail}
               disabled={isMutating || isSavingLoan}
-              emailDraft={emailDraft}
-              followUpAction={followUpAction}
-              isGeneratingEmailDraft={isGeneratingEmailDraft}
-              loanEditForm={loanEditForm}
-              noteDraft={noteDraft}
-              templates={templates.filter((template) => template.isActive)}
-              users={users.filter((user) => user.isActive)}
-              onAddNote={addNote}
-              onCancel={cancelSelectedAction}
               onComplete={completeSelectedAction}
-              onCreateFollowUpAction={submitFollowUpAction}
-              onDraftChange={setNoteDraft}
-              onEmailDraftChange={updateEmailDraftField}
-              onFollowUpActionChange={updateFollowUpAction}
-              onGenerateEmailDraft={generateEmailDraftForSelectedAction}
-              onGenerateTemplateActions={generateTemplateActionsForSelectedLoan}
-              onLoanEditFieldChange={updateLoanEditField}
-              onLoanEditSubmit={submitLoanEdit}
-              onCancelReasonChange={setCancelReason}
-              onReassign={reassignSelectedAction}
-              onReassignReasonChange={setReassignReason}
-              onReassignUserChange={setReassignUserId}
-              onRescheduleDateChange={setRescheduleDate}
-              onRescheduleReasonChange={setRescheduleReason}
-              onReschedule={rescheduleSelectedAction}
-              onSendEmailDraft={requestSendEmailDraft}
-              cancelReason={cancelReason}
-              reassignReason={reassignReason}
-              reassignUserId={reassignUserId}
-              rescheduleDate={rescheduleDate}
-              rescheduleReason={rescheduleReason}
+              onOpenDetail={openActionDetail}
             />
           </section>
           </>
+        ) : view === 'actionDetail' ? (
+          <ActionDetailPage
+            action={selectedAction}
+            cancelReason={cancelReason}
+            detail={loanDetail}
+            disabled={isMutating || isSavingLoan}
+            emailDraft={emailDraft}
+            followUpAction={followUpAction}
+            isGeneratingEmailDraft={isGeneratingEmailDraft}
+            loanEditForm={loanEditForm}
+            noteDraft={noteDraft}
+            templates={templates.filter((template) => template.isActive)}
+            users={users.filter((user) => user.isActive)}
+            onAddNote={addNote}
+            onBack={backToDashboardAction}
+            onCancel={cancelSelectedAction}
+            onCancelReasonChange={setCancelReason}
+            onComplete={completeSelectedAction}
+            onCreateFollowUpAction={submitFollowUpAction}
+            onDraftChange={setNoteDraft}
+            onEmailDraftChange={updateEmailDraftField}
+            onFollowUpActionChange={updateFollowUpAction}
+            onGenerateEmailDraft={generateEmailDraftForSelectedAction}
+            onGenerateTemplateActions={generateTemplateActionsForSelectedLoan}
+            onLoanEditFieldChange={updateLoanEditField}
+            onLoanEditSubmit={submitLoanEdit}
+            onReassign={reassignSelectedAction}
+            onReassignReasonChange={setReassignReason}
+            onReassignUserChange={setReassignUserId}
+            onReschedule={rescheduleSelectedAction}
+            onRescheduleDateChange={setRescheduleDate}
+            onRescheduleReasonChange={setRescheduleReason}
+            onSendEmailDraft={requestSendEmailDraft}
+            reassignReason={reassignReason}
+            reassignUserId={reassignUserId}
+            rescheduleDate={rescheduleDate}
+            rescheduleReason={rescheduleReason}
+          />
+        ) : view === 'loanDetail' ? (
+          <LoanDetailPage
+            actionForm={followUpAction}
+            detail={loanDetail}
+            disabled={isMutating || isSavingLoan}
+            loanEditForm={loanEditForm}
+            selected={selectedLoan}
+            templates={templates.filter((template) => template.isActive)}
+            onActionChange={updateFollowUpAction}
+            onBack={backToLoanPipeline}
+            onCreateAction={submitLoanPageAction}
+            onGenerateTemplateActions={generateTemplateActionsForSelectedLoan}
+            onLoanEditFieldChange={updateLoanEditField}
+            onLoanEditSubmit={submitLoanEdit}
+            onOpenAction={openDashboardAction}
+          />
         ) : view === 'customers' ? (
           <section className="content-grid">
             <div className="panel customer-panel">
@@ -1599,9 +1817,10 @@ function App() {
               )}
               {!isLoading && !error && filteredCustomers.length > 0 && (
                 <div className="customer-list">
-                  {filteredCustomers.map((customer) => (
+                  {pagedCustomers.map((customer) => (
                     <button
                       className={`customer-row ${selectedCustomer?.id === customer.id ? 'selected' : ''}`}
+                      id={itemDomId('customer', customer.id)}
                       key={customer.id}
                       onClick={() => setSelectedCustomerId(customer.id)}
                       type="button"
@@ -1626,42 +1845,54 @@ function App() {
                   ))}
                 </div>
               )}
+              <ListPagination
+                currentPage={currentCustomerPage}
+                itemLabel="Customers"
+                onPageChange={setCustomerPage}
+                pageCount={customerPageCount}
+                totalItems={filteredCustomers.length}
+              />
             </div>
 
             <CustomerContextPanel
-              addLoanForm={customerLoanForm}
-              customerForm={customerEditForm}
               detail={customerDetail}
-              disabled={isSavingCustomer}
-              isSubmittingLoan={isSubmittingCustomerLoan}
-              templates={templates.filter((template) => template.isActive)}
-              onAddLoanAction={addCustomerLoanAction}
-              onOpenAction={(actionId) => {
-                setView('dashboard')
-                setSelectedActionId(actionId)
-              }}
-              onOpenLoan={(loanNumber) => {
-                setSelectedLoanNumber(loanNumber)
-                setView('loans')
-              }}
-              onRemoveLoanAction={removeCustomerLoanAction}
-              onSubmitLoan={submitCustomerLoan}
-              onSubmit={submitCustomerEdit}
-              onUpdateLoanAction={updateCustomerLoanAction}
-              onUpdateLoanField={updateCustomerLoanField}
-              onUpdateField={updateCustomerEditField}
+              onOpenAction={openDashboardAction}
+              onOpenLoan={openLoanPipeline}
+              onOpenDetails={openCustomerDetail}
               selected={selectedCustomer}
             />
           </section>
+        ) : view === 'customerDetail' ? (
+          <CustomerDetailPage
+            addLoanForm={customerLoanForm}
+            customerForm={customerEditForm}
+            detail={customerDetail}
+            disabled={isSavingCustomer}
+            isSubmittingLoan={isSubmittingCustomerLoan}
+            templates={templates.filter((template) => template.isActive)}
+            onAddLoanAction={addCustomerLoanAction}
+            onBack={backToCustomers}
+            onOpenAction={openDashboardAction}
+            onOpenLoan={openLoanDetail}
+            onRemoveLoanAction={removeCustomerLoanAction}
+            onSubmit={submitCustomerEdit}
+            onSubmitLoan={submitCustomerLoan}
+            onUpdateField={updateCustomerEditField}
+            onUpdateLoanAction={updateCustomerLoanAction}
+            onUpdateLoanField={updateCustomerLoanField}
+            selected={selectedCustomer}
+          />
         ) : view === 'reports' ? (
           <ReportsPage
-            onOpenAction={(actionId) => {
-              setView('dashboard')
-              setSelectedActionId(actionId)
-            }}
+            onOpenAction={openDashboardAction}
             onOpenLoan={(loanNumber) => {
-              setView('dashboard')
-              setSelectedActionId(dashboard.openActions.find((action) => action.loanNumber === loanNumber)?.id ?? null)
+              const actionId = dashboard.openActions.find((action) => action.loanNumber === loanNumber)?.id
+
+              if (actionId) {
+                openDashboardAction(actionId)
+              } else {
+                openLoanPipeline(loanNumber)
+              }
             }}
             summary={reportSummary}
           />
@@ -1709,12 +1940,12 @@ function App() {
                   <span>Officer</span>
                   <span>Conditions</span>
                   <span>ICD</span>
-                  <span>Next action</span>
                   <span>Due</span>
                 </div>
-                {filteredLoans.map((loan) => (
+                {pagedLoans.map((loan) => (
                   <button
                     className={`pipeline-row ${selectedLoan?.loanNumber === loan.loanNumber ? 'selected' : ''}`}
+                    id={itemDomId('loan', loan.loanNumber)}
                     key={loan.loanNumber}
                     onClick={() => setSelectedLoanNumber(loan.loanNumber)}
                     role="row"
@@ -1726,24 +1957,24 @@ function App() {
                     <span>{loan.loanOfficerName}</span>
                     <span>{loan.totalOpenConditionCount} open</span>
                     <span>{formatIcdStatus(loan.icdSent, loan.icdSigned)}</span>
-                    <span>{loan.nextActionTitle ?? 'No open action'}</span>
                     <span>{formatDueDate(loan.nextActionDueDate)} - {formatDaysToClose(loan.daysToClose)}</span>
                   </button>
                 ))}
               </div>
+              <ListPagination
+                currentPage={currentLoanPage}
+                itemLabel="Loan pipeline"
+                onPageChange={setLoanPage}
+                pageCount={loanPageCount}
+                totalItems={filteredLoans.length}
+              />
             </div>
 
             <LoanPipelineDetailPanel
-              actionForm={followUpAction}
               detail={loanDetail}
-              disabled={isMutating}
               selected={selectedLoan}
-              onActionChange={updateFollowUpAction}
-              onCreateAction={submitLoanPageAction}
-              onOpenAction={(actionId) => {
-                setView('dashboard')
-                setSelectedActionId(actionId)
-              }}
+              onOpenAction={openDashboardAction}
+              onOpenDetails={openLoanDetail}
             />
           </section>
         )}
@@ -1774,17 +2005,29 @@ function DashboardAlertList({
   title: string
 }) {
   const visibleItems = items ?? []
+  const pageSize = 5
+  const [page, setPage] = useState(0)
+  const pageCount = Math.max(1, Math.ceil(visibleItems.length / pageSize))
+  const currentPage = Math.min(page, pageCount - 1)
+  const pageItems = visibleItems.slice(currentPage * pageSize, currentPage * pageSize + pageSize)
+
+  useEffect(() => {
+    setPage(0)
+  }, [visibleItems.length])
 
   return (
     <section className="panel dashboard-alert-panel">
       <div className="panel-header">
         <div>
           <h2>{title}</h2>
-          <p>{visibleItems.length} loans</p>
+          <p>
+            {visibleItems.length} loan{visibleItems.length === 1 ? '' : 's'}
+            {visibleItems.length > pageSize ? ` - page ${currentPage + 1} of ${pageCount}` : ''}
+          </p>
         </div>
       </div>
       <div className="dashboard-alert-list">
-        {visibleItems.slice(0, 5).map((item) => (
+        {pageItems.map((item) => (
           <button className="dashboard-alert-row" key={`${title}-${item.loanNumber}`} type="button" onClick={() => onOpenLoan(item.loanNumber)}>
             <span>
               <strong>{item.borrowerName}</strong>
@@ -1798,6 +2041,223 @@ function DashboardAlertList({
         ))}
         {visibleItems.length === 0 && <p className="state-message">No loans need attention.</p>}
       </div>
+      {visibleItems.length > pageSize && (
+        <div className="pagination-controls" aria-label={`${title} pagination`}>
+          <button className="secondary" disabled={currentPage === 0} type="button" onClick={() => setPage((value) => Math.max(0, value - 1))}>
+            Previous
+          </button>
+          <span>{currentPage + 1} / {pageCount}</span>
+          <button className="secondary" disabled={currentPage >= pageCount - 1} type="button" onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}>
+            Next
+          </button>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function ListPagination({
+  currentPage,
+  itemLabel,
+  onPageChange,
+  pageCount,
+  totalItems,
+}: {
+  currentPage: number
+  itemLabel: string
+  onPageChange: (page: number) => void
+  pageCount: number
+  totalItems: number
+}) {
+  if (totalItems <= listPageSize) {
+    return null
+  }
+
+  return (
+    <div className="pagination-controls list-pagination" aria-label={`${itemLabel} pagination`}>
+      <button className="secondary" disabled={currentPage === 0} type="button" onClick={() => onPageChange(Math.max(0, currentPage - 1))}>
+        Previous
+      </button>
+      <span>{currentPage + 1} / {pageCount}</span>
+      <button className="secondary" disabled={currentPage >= pageCount - 1} type="button" onClick={() => onPageChange(Math.min(pageCount - 1, currentPage + 1))}>
+        Next
+      </button>
+    </div>
+  )
+}
+
+function HomePage({
+  currentUser,
+  customerCount,
+  dashboard,
+  loanCount,
+  onOpenAdmin,
+  onOpenDashboard,
+  onOpenIntake,
+  onOpenLoans,
+  recentActivity,
+  templateCount,
+}: {
+  currentUser: CurrentUser | null
+  customerCount: number
+  dashboard: DashboardSummary
+  loanCount: number
+  onOpenAdmin: () => void
+  onOpenDashboard: () => void
+  onOpenIntake: () => void
+  onOpenLoans: () => void
+  recentActivity: ReportSummary['recentActivity']
+  templateCount: number
+}) {
+  const userName = currentUser?.displayName ?? 'there'
+  const latestActivity = recentActivity.slice(0, 3)
+  const [heroSlideIndex, setHeroSlideIndex] = useState(0)
+  const [isHeroPaused, setIsHeroPaused] = useState(false)
+  const heroSlide = homeHeroSlides[heroSlideIndex]
+
+  useEffect(() => {
+    if (isHeroPaused) {
+      return undefined
+    }
+
+    const timerId = window.setInterval(() => {
+      setHeroSlideIndex((current) => (current + 1) % homeHeroSlides.length)
+    }, 8000)
+
+    return () => window.clearInterval(timerId)
+  }, [isHeroPaused])
+
+  return (
+    <section className="home-page">
+      <section
+        className="home-hero"
+        onBlur={() => setIsHeroPaused(false)}
+        onFocus={() => setIsHeroPaused(true)}
+        onMouseEnter={() => setIsHeroPaused(true)}
+        onMouseLeave={() => setIsHeroPaused(false)}
+      >
+        <div className="home-hero-copy">
+          <p className="eyebrow">Broker App prototype</p>
+          <div>
+            <h2>Welcome back, {userName}.</h2>
+            <p>
+              The prototype now covers intake, persisted workflows, template-backed actions, customer and loan detail pages,
+              and tracker-style loan fields.
+            </p>
+          </div>
+          <div className="home-hero-actions">
+            <button type="button" onClick={onOpenDashboard}>Review queue</button>
+            <button type="button" onClick={onOpenIntake}>New Intake</button>
+          </div>
+        </div>
+
+        <div className="home-hero-carousel" aria-live="polite">
+          <img alt={heroSlide.alt} src={heroSlide.image} />
+          <div className="home-hero-caption">
+            <span>Prototype focus</span>
+            <h3>{heroSlide.title}</h3>
+            <p>{heroSlide.description}</p>
+            <div className="home-hero-dots" aria-label="Hero carousel slides">
+              {homeHeroSlides.map((slide, index) => (
+                <button
+                  aria-label={`Show ${slide.title}`}
+                  className={index === heroSlideIndex ? 'active' : ''}
+                  key={slide.title}
+                  type="button"
+                  onClick={() => setHeroSlideIndex(index)}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="home-summary-grid" aria-label="Workspace summary">
+        <article>
+          <span>Open actions</span>
+          <strong>{dashboard.openActions.length}</strong>
+          <small>{dashboard.overdueCount} overdue, {dashboard.dueTodayCount} due today</small>
+        </article>
+        <article>
+          <span>Loans</span>
+          <strong>{loanCount}</strong>
+          <small>{dashboard.closingWithin7DaysCount} closing within 7 days</small>
+        </article>
+        <article>
+          <span>Customers</span>
+          <strong>{customerCount}</strong>
+          <small>Existing borrowers can receive new loans</small>
+        </article>
+        <article>
+          <span>Templates</span>
+          <strong>{templateCount}</strong>
+          <small>Reusable borrower/title/realtor action sets</small>
+        </article>
+      </section>
+
+      <section className="home-grid">
+        <div className="panel home-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Recent progress</h2>
+              <p>Latest prototype capabilities</p>
+            </div>
+          </div>
+          <div className="home-progress-list">
+            <p><strong>Detail pages</strong><span>Dashboard actions, loans, and customers now have focused full-page workspaces.</span></p>
+            <p><strong>Spreadsheet parity</strong><span>Loan officer, ICD state, title/realtor contacts, co-borrower email, and needs are visible.</span></p>
+            <p><strong>Workflow persistence</strong><span>Complete, reschedule, comment, add loan, intake, and template generation are database-backed.</span></p>
+          </div>
+        </div>
+
+        <div className="panel home-panel">
+          <div className="panel-header">
+            <div>
+              <h2>What to do next</h2>
+              <p>Recommended prototype path</p>
+            </div>
+          </div>
+          <div className="home-action-list">
+            <button type="button" onClick={onOpenDashboard}>
+              <strong>Clear urgent actions</strong>
+              <small>Review overdue, due-today, and ICD attention files.</small>
+            </button>
+            <button type="button" onClick={onOpenLoans}>
+              <strong>Audit loan details</strong>
+              <small>Check closing dates, contacts, and open condition counts.</small>
+            </button>
+            <button type="button" onClick={onOpenAdmin}>
+              <strong>Tune templates</strong>
+              <small>Refine required action sets before importing real files.</small>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel home-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Recent activity</h2>
+            <p>{latestActivity.length} latest audit events</p>
+          </div>
+        </div>
+        <div className="activity-list">
+          {latestActivity.map((activity) => (
+            <div className="activity-row" key={activity.id}>
+              <span>
+                <strong>{activity.operation}</strong>
+                <small>{activity.entityType} {activity.entityId}</small>
+              </span>
+              <span>
+                <strong>{activity.actorName}</strong>
+                <small>{formatDateTime(activity.occurredAtUtc)}</small>
+              </span>
+              <p>{activity.changedFields}</p>
+            </div>
+          ))}
+          {latestActivity.length === 0 && <p className="state-message">No recent activity yet.</p>}
+        </div>
+      </section>
     </section>
   )
 }
@@ -1838,21 +2298,48 @@ function LoanNeedsGroups({ actions }: { actions: LoanActionDetail[] }) {
   )
 }
 
+function LoanNeedsSummary({ actions }: { actions: LoanActionDetail[] }) {
+  const sections = [
+    { key: 'Borrower', label: 'Borrower Needs' },
+    { key: 'Title', label: 'Title Needs' },
+    { key: 'Realtor', label: 'Retail Needs' },
+  ]
+
+  return (
+    <div className="needs-summary">
+      {sections.map((section) => {
+        const openActions = actions
+          .filter((action) => action.section === section.key && action.workflowStatus !== 'Completed' && action.workflowStatus !== 'Cancelled')
+          .slice(0, 3)
+
+        return (
+          <section className="needs-summary-group" key={section.key}>
+            <h3>{section.label}</h3>
+            {openActions.map((action) => (
+              <button className="need-summary-row" key={action.id} type="button">
+                <span>
+                  <strong>{action.title}</strong>
+                  <small>{action.priority} - {formatDueDate(action.dueDate)}</small>
+                </span>
+              </button>
+            ))}
+            {openActions.length === 0 && <p>No open needs.</p>}
+          </section>
+        )
+      })}
+    </div>
+  )
+}
+
 function LoanPipelineDetailPanel({
-  actionForm,
   detail,
-  disabled,
-  onActionChange,
-  onCreateAction,
   onOpenAction,
+  onOpenDetails,
   selected,
 }: {
-  actionForm: FollowUpActionForm
   detail: LoanDetail | null
-  disabled: boolean
-  onActionChange: (field: keyof FollowUpActionForm, value: string) => void
-  onCreateAction: (event: FormEvent<HTMLFormElement>) => void
   onOpenAction: (actionId: string) => void
+  onOpenDetails: (loanNumber: string) => void
   selected: LoanListItem | null
 }) {
   if (!selected) {
@@ -1865,8 +2352,7 @@ function LoanPipelineDetailPanel({
   }
 
   const actions = detail?.loanNumber === selected.loanNumber ? detail.actions : []
-  const notes = detail?.loanNumber === selected.loanNumber ? detail.notes : []
-  const history = detail?.loanNumber === selected.loanNumber ? detail.history : []
+  const openActions = actions.filter((action) => action.workflowStatus !== 'Completed' && action.workflowStatus !== 'Cancelled')
 
   return (
     <aside className="panel detail-panel loan-pipeline-detail">
@@ -1874,6 +2360,10 @@ function LoanPipelineDetailPanel({
         <span className="status upcoming">{selected.status}</span>
         <h2>{selected.borrowerName}</h2>
         <p>{selected.loanNumber} - {selected.stage}</p>
+      </div>
+
+      <div className="detail-primary-actions">
+        <button className="detail-action" type="button" onClick={() => onOpenDetails(selected.loanNumber)}>Details</button>
       </div>
 
       <dl>
@@ -1890,44 +2380,12 @@ function LoanPipelineDetailPanel({
           <dd>{formatDueDate(detail?.targetCloseDate ?? null)}</dd>
         </div>
         <div>
-          <dt>Borrower email</dt>
-          <dd>{detail?.borrowerEmail ?? 'Not available'}</dd>
-        </div>
-        <div>
-          <dt>Co-borrower email</dt>
-          <dd>{detail?.coBorrowerEmail ?? 'Not available'}</dd>
-        </div>
-        <div>
-          <dt>Loan officer</dt>
-          <dd>{detail?.loanOfficerName ?? selected.loanOfficerName}</dd>
-        </div>
-        <div>
           <dt>Days to close</dt>
           <dd>{formatDaysToClose(detail?.daysToClose ?? selected.daysToClose)}</dd>
         </div>
         <div>
           <dt>ICD status</dt>
           <dd>{formatIcdStatus(detail?.icdSent ?? selected.icdSent, detail?.icdSigned ?? selected.icdSigned)}</dd>
-        </div>
-        <div>
-          <dt>Title contact</dt>
-          <dd>{detail?.titleContactName ?? 'Not available'}</dd>
-        </div>
-        <div>
-          <dt>Title email</dt>
-          <dd>{detail?.titleContactEmail ?? 'Not available'}</dd>
-        </div>
-        <div>
-          <dt>Realtor</dt>
-          <dd>{detail?.realtorName ?? 'Not available'}</dd>
-        </div>
-        <div>
-          <dt>Realtor email</dt>
-          <dd>{detail?.realtorEmail ?? 'Not available'}</dd>
-        </div>
-        <div>
-          <dt>Last contact</dt>
-          <dd>{formatDueDate(detail?.lastContactDate ?? null)}</dd>
         </div>
         <div>
           <dt>Open conditions</dt>
@@ -1939,62 +2397,9 @@ function LoanPipelineDetailPanel({
         </div>
       </dl>
 
-      <LoanNeedsGroups actions={actions} />
-
-      <form className="create-action-box" onSubmit={onCreateAction}>
-        <div className="template-items-header">
-          <h3>Create action</h3>
-          <button disabled={disabled || !actionForm.title.trim() || !actionForm.dueDate} type="submit">
-            Create Action
-          </button>
-        </div>
-        <div className="form-grid two-column">
-          <label>
-            Title
-            <input
-              disabled={disabled}
-              onChange={(event) => onActionChange('title', event.target.value)}
-              required
-              value={actionForm.title}
-            />
-          </label>
-          <label>
-            Section
-            <select disabled={disabled} onChange={(event) => onActionChange('section', event.target.value)} value={actionForm.section}>
-              {actionSections.map((section) => <option key={section}>{section}</option>)}
-            </select>
-          </label>
-          <label>
-            Priority
-            <select disabled={disabled} onChange={(event) => onActionChange('priority', event.target.value)} value={actionForm.priority}>
-              {actionPriorities.map((priority) => <option key={priority}>{priority}</option>)}
-            </select>
-          </label>
-          <label>
-            Due date
-            <input
-              disabled={disabled}
-              onChange={(event) => onActionChange('dueDate', event.target.value)}
-              required
-              type="date"
-              value={actionForm.dueDate}
-            />
-          </label>
-          <label className="span-all">
-            Description
-            <textarea
-              disabled={disabled}
-              onChange={(event) => onActionChange('description', event.target.value)}
-              rows={3}
-              value={actionForm.description}
-            />
-          </label>
-        </div>
-      </form>
-
       <div className="activity-feed">
-        <h3>Actions</h3>
-        {actions.map((action) => (
+        <h3>Open actions</h3>
+        {openActions.slice(0, 5).map((action) => (
           <button className="context-row" key={action.id} type="button" onClick={() => onOpenAction(action.id)}>
             <span>
               <strong>{action.title}</strong>
@@ -2006,31 +2411,313 @@ function LoanPipelineDetailPanel({
             </span>
           </button>
         ))}
-        {actions.length === 0 && <p>No actions yet.</p>}
+        {openActions.length > 5 && <p>{openActions.length - 5} more actions in details.</p>}
+        {openActions.length === 0 && <p>No open actions.</p>}
+      </div>
+    </aside>
+  )
+}
+
+function LoanDetailPage({
+  actionForm,
+  detail,
+  disabled,
+  loanEditForm,
+  onActionChange,
+  onBack,
+  onCreateAction,
+  onGenerateTemplateActions,
+  onLoanEditFieldChange,
+  onLoanEditSubmit,
+  onOpenAction,
+  selected,
+  templates,
+}: {
+  actionForm: FollowUpActionForm
+  detail: LoanDetail | null
+  disabled: boolean
+  loanEditForm: LoanEditForm
+  onActionChange: (field: keyof FollowUpActionForm, value: string) => void
+  onBack: () => void
+  onCreateAction: (event: FormEvent<HTMLFormElement>) => void
+  onGenerateTemplateActions: (templateId: string) => void
+  onLoanEditFieldChange: (field: keyof LoanEditForm, value: string | boolean) => void
+  onLoanEditSubmit: (event: FormEvent<HTMLFormElement>) => void
+  onOpenAction: (actionId: string) => void
+  selected: LoanListItem | null
+  templates: ActionTemplateListItem[]
+}) {
+  const selectedGenerationTemplateId = templates[0]?.id ?? ''
+  const borrowerName = detail?.borrowerName ?? selected?.borrowerName ?? 'Loan details'
+  const loanNumber = detail?.loanNumber ?? selected?.loanNumber ?? ''
+  const actions = detail?.actions ?? []
+
+  return (
+    <section className="loan-detail-page">
+      <div className="panel loan-detail-hero">
+        <div>
+          <span className="status upcoming">{detail?.status ?? selected?.status ?? 'Loading'}</span>
+          <h2>{borrowerName}</h2>
+          <p>{loanNumber || 'Loading loan'} - {detail?.stage ?? selected?.stage ?? 'Loading'}</p>
+        </div>
+        <button className="secondary" type="button" onClick={onBack}>Back to pipeline</button>
       </div>
 
-      <div className="activity-feed">
-        <h3>Recent notes</h3>
-        {notes.slice(0, 4).map((note, index) => (
-          <p key={`${note.createdAtUtc}-${index}`}>
-            <strong>{formatDateTime(note.createdAtUtc)}</strong>
-            <span>{note.body}</span>
-          </p>
-        ))}
-        {notes.length === 0 && <p>No notes yet.</p>}
-      </div>
+      <section className="loan-detail-grid">
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>File snapshot</h2>
+              <p>{detail ? `${detail.totalOpenConditionCount} open conditions` : 'Loading'}</p>
+            </div>
+          </div>
+          <dl className="detail-list">
+            <div>
+              <dt>Borrower email</dt>
+              <dd>{detail?.borrowerEmail ?? 'Not available'}</dd>
+            </div>
+            <div>
+              <dt>Co-borrower email</dt>
+              <dd>{detail?.coBorrowerEmail ?? 'Not available'}</dd>
+            </div>
+            <div>
+              <dt>Loan officer</dt>
+              <dd>{detail?.loanOfficerName ?? selected?.loanOfficerName ?? 'Loading'}</dd>
+            </div>
+            <div>
+              <dt>Target close</dt>
+              <dd>{formatDueDate(detail?.targetCloseDate ?? null)} - {formatDaysToClose(detail?.daysToClose ?? selected?.daysToClose ?? null)}</dd>
+            </div>
+            <div>
+              <dt>ICD status</dt>
+              <dd>{detail ? formatIcdStatus(detail.icdSent, detail.icdSigned) : selected ? formatIcdStatus(selected.icdSent, selected.icdSigned) : 'Loading'}</dd>
+            </div>
+            <div>
+              <dt>Last contact</dt>
+              <dd>{formatDueDate(detail?.lastContactDate ?? null)}</dd>
+            </div>
+            <div>
+              <dt>Title contact</dt>
+              <dd>{detail?.titleContactName ?? 'Not available'}{detail?.titleContactEmail ? ` - ${detail.titleContactEmail}` : ''}</dd>
+            </div>
+            <div>
+              <dt>Realtor</dt>
+              <dd>{detail?.realtorName ?? 'Not available'}{detail?.realtorEmail ? ` - ${detail.realtorEmail}` : ''}</dd>
+            </div>
+            <div>
+              <dt>Date added</dt>
+              <dd>{detail ? formatDateTime(detail.createdAtUtc) : 'Loading'}</dd>
+            </div>
+            <div>
+              <dt>Last updated</dt>
+              <dd>{detail ? formatDateTime(detail.updatedAtUtc) : 'Loading'}</dd>
+            </div>
+          </dl>
+        </div>
 
-      <div className="activity-feed">
-        <h3>History</h3>
-        {history.slice(0, 4).map((event) => (
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>Condition counts</h2>
+              <p>Open borrower, title, and realtor needs</p>
+            </div>
+          </div>
+          <div className="condition-count-grid">
+            <span><strong>{detail?.borrowerOpenConditionCount ?? selected?.borrowerOpenConditionCount ?? 0}</strong><small>Borrower</small></span>
+            <span><strong>{detail?.titleOpenConditionCount ?? selected?.titleOpenConditionCount ?? 0}</strong><small>Title</small></span>
+            <span><strong>{detail?.realtorOpenConditionCount ?? selected?.realtorOpenConditionCount ?? 0}</strong><small>Realtor</small></span>
+            <span><strong>{detail?.totalOpenConditionCount ?? selected?.totalOpenConditionCount ?? 0}</strong><small>Total</small></span>
+          </div>
+        </div>
+      </section>
+
+      <section className="loan-detail-grid wide">
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <h2>Needs</h2>
+              <p>{actions.length} total action records</p>
+            </div>
+          </div>
+          <LoanNeedsGroups actions={actions} />
+        </div>
+
+        <div className="panel">
+          <form className="create-action-box" onSubmit={onCreateAction}>
+            <div className="template-items-header">
+              <h2>Create action</h2>
+              <button disabled={disabled || !actionForm.title.trim() || !actionForm.dueDate} type="submit">
+                Create Action
+              </button>
+            </div>
+            <div className="form-grid two-column">
+              <label>
+                Title
+                <input disabled={disabled} onChange={(event) => onActionChange('title', event.target.value)} required value={actionForm.title} />
+              </label>
+              <label>
+                Section
+                <select disabled={disabled} onChange={(event) => onActionChange('section', event.target.value)} value={actionForm.section}>
+                  {actionSections.map((section) => <option key={section}>{section}</option>)}
+                </select>
+              </label>
+              <label>
+                Priority
+                <select disabled={disabled} onChange={(event) => onActionChange('priority', event.target.value)} value={actionForm.priority}>
+                  {actionPriorities.map((priority) => <option key={priority}>{priority}</option>)}
+                </select>
+              </label>
+              <label>
+                Due date
+                <input disabled={disabled} onChange={(event) => onActionChange('dueDate', event.target.value)} required type="date" value={actionForm.dueDate} />
+              </label>
+              <label className="span-all">
+                Description
+                <textarea disabled={disabled} onChange={(event) => onActionChange('description', event.target.value)} rows={3} value={actionForm.description} />
+              </label>
+            </div>
+          </form>
+
+          <div className="follow-up-box template-generate-box">
+            <div>
+              <h3>Generate from template</h3>
+              <p>Create missing standardized actions for this loan.</p>
+            </div>
+            <select aria-label="Action template" disabled={disabled || templates.length === 0} defaultValue={selectedGenerationTemplateId}>
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>{template.name} - {template.itemCount} items</option>
+              ))}
+            </select>
+            <button
+              className="secondary"
+              disabled={disabled || templates.length === 0}
+              type="button"
+              onClick={(event) => {
+                const select = event.currentTarget.parentElement?.querySelector('select') as HTMLSelectElement | null
+                onGenerateTemplateActions(select?.value ?? selectedGenerationTemplateId)
+              }}
+            >
+              Generate actions
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <form className="edit-box loan-edit-page-form" onSubmit={onLoanEditSubmit}>
+          <div className="panel-header">
+            <div>
+              <h2>Edit loan</h2>
+              <p>Update tracker fields, contacts, stage, and ICD state.</p>
+            </div>
+            <button className="secondary" disabled={disabled || !loanEditForm.type || !loanEditForm.stage || !loanEditForm.status} type="submit">
+              {disabled ? 'Saving...' : 'Save loan'}
+            </button>
+          </div>
+          <div className="form-grid three-column">
+            <label>
+              Type
+              <select disabled={disabled} onChange={(event) => onLoanEditFieldChange('type', event.target.value)} value={loanEditForm.type}>
+                {loanTypes.map((loanType) => <option key={loanType}>{loanType}</option>)}
+              </select>
+            </label>
+            <label>
+              Stage
+              <select disabled={disabled} onChange={(event) => onLoanEditFieldChange('stage', event.target.value)} value={loanEditForm.stage}>
+                {loanStages.map((stage) => <option key={stage}>{stage}</option>)}
+              </select>
+            </label>
+            <label>
+              Status
+              <select disabled={disabled} onChange={(event) => onLoanEditFieldChange('status', event.target.value)} value={loanEditForm.status}>
+                {loanStatuses.map((status) => <option key={status}>{status}</option>)}
+              </select>
+            </label>
+            <label>
+              Amount
+              <input disabled={disabled} min="0" onChange={(event) => onLoanEditFieldChange('amount', event.target.value)} step="1000" type="number" value={loanEditForm.amount} />
+            </label>
+            <label>
+              Target close
+              <input disabled={disabled} onChange={(event) => onLoanEditFieldChange('targetCloseDate', event.target.value)} type="date" value={loanEditForm.targetCloseDate} />
+            </label>
+            <label>
+              Last contact
+              <input disabled={disabled} onChange={(event) => onLoanEditFieldChange('lastContactDate', event.target.value)} type="date" value={loanEditForm.lastContactDate} />
+            </label>
+            <label>
+              Co-borrower email
+              <input disabled={disabled} onChange={(event) => onLoanEditFieldChange('coBorrowerEmail', event.target.value)} type="email" value={loanEditForm.coBorrowerEmail} />
+            </label>
+            <label>
+              Title contact
+              <input disabled={disabled} onChange={(event) => onLoanEditFieldChange('titleContactName', event.target.value)} value={loanEditForm.titleContactName} />
+            </label>
+            <label>
+              Title email
+              <input disabled={disabled} onChange={(event) => onLoanEditFieldChange('titleContactEmail', event.target.value)} type="email" value={loanEditForm.titleContactEmail} />
+            </label>
+            <label>
+              Realtor name
+              <input disabled={disabled} onChange={(event) => onLoanEditFieldChange('realtorName', event.target.value)} value={loanEditForm.realtorName} />
+            </label>
+            <label>
+              Realtor email
+              <input disabled={disabled} onChange={(event) => onLoanEditFieldChange('realtorEmail', event.target.value)} type="email" value={loanEditForm.realtorEmail} />
+            </label>
+            <label className="check-label">
+              <input checked={loanEditForm.icdSent} disabled={disabled} onChange={(event) => onLoanEditFieldChange('icdSent', event.target.checked)} type="checkbox" />
+              ICD sent
+            </label>
+            <label className="check-label">
+              <input checked={loanEditForm.icdSigned} disabled={disabled} onChange={(event) => onLoanEditFieldChange('icdSigned', event.target.checked)} type="checkbox" />
+              ICD signed
+            </label>
+          </div>
+        </form>
+      </section>
+
+      <section className="loan-detail-grid">
+        <div className="panel activity-feed">
+          <h2>Actions</h2>
+          {actions.map((action) => (
+            <button className="context-row" key={action.id} type="button" onClick={() => onOpenAction(action.id)}>
+              <span>
+                <strong>{action.title}</strong>
+                <small>{action.section} - {action.workflowStatus}</small>
+              </span>
+              <span>
+                <strong>{formatDueDate(action.dueDate)}</strong>
+                <small>{action.priority}</small>
+              </span>
+            </button>
+          ))}
+          {actions.length === 0 && <p>No actions yet.</p>}
+        </div>
+
+        <div className="panel activity-feed">
+          <h2>Recent notes</h2>
+          {(detail?.notes.length ? detail.notes : []).map((note, index) => (
+            <p key={`${note.createdAtUtc}-${index}`}>
+              <strong>{formatDateTime(note.createdAtUtc)}</strong>
+              <span>{note.body}</span>
+            </p>
+          ))}
+          {detail?.notes.length === 0 && <p>No notes yet.</p>}
+        </div>
+      </section>
+
+      <section className="panel activity-feed">
+        <h2>History</h2>
+        {(detail?.history.length ? detail.history : []).map((event) => (
           <p key={`${event.actionId}-${event.occurredAtUtc}`}>
             <strong>{formatDateTime(event.occurredAtUtc)}</strong>
             <span>{event.actionId}: {event.eventType}</span>
           </p>
         ))}
-        {history.length === 0 && <p>No history yet.</p>}
-      </div>
-    </aside>
+        {detail?.history.length === 0 && <p>No history yet.</p>}
+      </section>
+    </section>
   )
 }
 
@@ -2399,6 +3086,101 @@ function BreakdownPanel({
 }
 
 function CustomerContextPanel({
+  detail,
+  onOpenAction,
+  onOpenDetails,
+  onOpenLoan,
+  selected,
+}: {
+  detail: CustomerDetail | null
+  onOpenAction: (actionId: string) => void
+  onOpenDetails: (customerId: string) => void
+  onOpenLoan: (loanNumber: string) => void
+  selected: CustomerListItem | null
+}) {
+  if (!selected) {
+    return (
+      <aside className="panel detail-panel">
+        <h2>Customer context</h2>
+        <p className="state-message">Select a customer to review borrower activity.</p>
+      </aside>
+    )
+  }
+
+  const loans = detail?.loans ?? []
+  const openActions = detail?.openActions ?? []
+
+  return (
+    <aside className="panel detail-panel customer-detail-panel">
+      <div className="detail-header">
+        <span className="status upcoming">{selected.status}</span>
+        <h2>{selected.borrowerName}</h2>
+        <p>{selected.email ?? 'No email'} - {selected.phone ?? 'No phone'}</p>
+      </div>
+
+      <div className="detail-primary-actions">
+        <button className="detail-action" type="button" onClick={() => onOpenDetails(selected.id)}>Details</button>
+      </div>
+
+      <dl>
+        <div>
+          <dt>Loans</dt>
+          <dd>{detail?.loans.length ?? selected.loanCount}</dd>
+        </div>
+        <div>
+          <dt>Open actions</dt>
+          <dd>{detail?.openActions.length ?? selected.openActionCount}</dd>
+        </div>
+        <div>
+          <dt>Next action</dt>
+          <dd>{selected.nextActionTitle ?? 'None'}</dd>
+        </div>
+        <div>
+          <dt>Next due</dt>
+          <dd>{formatDueDate(selected.nextActionDueDate)}</dd>
+        </div>
+      </dl>
+
+      <div className="activity-feed">
+        <h3>Loans</h3>
+        {loans.slice(0, 3).map((loan) => (
+          <button className="context-row" key={loan.loanNumber} type="button" onClick={() => onOpenLoan(loan.loanNumber)}>
+            <span>
+              <strong>{loan.loanNumber}</strong>
+              <small>{loan.stage} - {loan.openActionCount} open</small>
+            </span>
+            <span>
+              <strong>{formatIcdStatus(loan.icdSent, loan.icdSigned)}</strong>
+              <small>{formatDaysToClose(loan.daysToClose)}</small>
+            </span>
+          </button>
+        ))}
+        {loans.length > 3 && <p>{loans.length - 3} more loans in details.</p>}
+        {detail && loans.length === 0 && <p>No loans yet.</p>}
+      </div>
+
+      <div className="activity-feed">
+        <h3>Open actions</h3>
+        {openActions.slice(0, 4).map((action) => (
+          <button className="context-row" key={action.id} type="button" onClick={() => onOpenAction(action.id)}>
+            <span>
+              <strong>{action.title}</strong>
+              <small>{action.loanNumber} - {sectionCopy[action.section] ?? action.section}</small>
+            </span>
+            <span>
+              <strong>{formatDueDate(action.dueDate)}</strong>
+              <small>{action.priority}</small>
+            </span>
+          </button>
+        ))}
+        {openActions.length > 4 && <p>{openActions.length - 4} more actions in details.</p>}
+        {detail && openActions.length === 0 && <p>No open actions.</p>}
+      </div>
+    </aside>
+  )
+}
+
+function CustomerDetailPage({
   addLoanForm,
   customerForm,
   detail,
@@ -2406,6 +3188,7 @@ function CustomerContextPanel({
   isSubmittingLoan,
   templates,
   onAddLoanAction,
+  onBack,
   onOpenAction,
   onOpenLoan,
   onRemoveLoanAction,
@@ -2423,6 +3206,7 @@ function CustomerContextPanel({
   isSubmittingLoan: boolean
   templates: ActionTemplateListItem[]
   onAddLoanAction: () => void
+  onBack: () => void
   onOpenAction: (actionId: string) => void
   onOpenLoan: (loanNumber: string) => void
   onRemoveLoanAction: (index: number) => void
@@ -2433,41 +3217,53 @@ function CustomerContextPanel({
   onUpdateField: (field: keyof CustomerEditForm, value: string) => void
   selected: CustomerListItem | null
 }) {
-  if (!selected) {
+  if (!selected && !detail) {
     return (
-      <aside className="panel detail-panel">
-        <h2>Customer context</h2>
+      <section className="panel customer-detail-page">
+        <h2>Customer details</h2>
         <p className="state-message">Select a customer to review borrower activity.</p>
-      </aside>
+      </section>
     )
   }
 
   const loanDisabled = disabled || isSubmittingLoan
+  const borrowerName = detail?.borrowerName ?? selected?.borrowerName ?? 'Customer details'
+  const email = detail?.email ?? selected?.email ?? null
+  const phone = detail?.phone ?? selected?.phone ?? null
+  const status = detail?.status ?? selected?.status ?? 'Loading'
+  const loanCount = detail?.loans.length ?? selected?.loanCount ?? 0
+  const openActionCount = detail?.openActions.length ?? selected?.openActionCount ?? 0
+  const nextActionTitle = selected?.nextActionTitle ?? detail?.openActions[0]?.title ?? 'None'
 
   return (
-    <aside className="panel detail-panel customer-detail-panel">
-      <div className="detail-header">
-        <span className="status upcoming">{selected.status}</span>
-        <h2>{selected.borrowerName}</h2>
-        <p>{selected.email ?? 'No email'} - {selected.phone ?? 'No phone'}</p>
+    <section className="customer-detail-page">
+      <div className="panel loan-detail-hero">
+        <div>
+          <span className="status upcoming">{status}</span>
+          <h2>{borrowerName}</h2>
+          <p>{email ?? 'No email'} - {phone ?? 'No phone'}</p>
+        </div>
+        <button className="secondary" type="button" onClick={onBack}>Back to customers</button>
       </div>
 
-      <dl>
+      <div className="panel">
+      <dl className="detail-list">
         <div>
           <dt>Loans</dt>
-          <dd>{detail?.loans.length ?? selected.loanCount}</dd>
+          <dd>{loanCount}</dd>
         </div>
         <div>
           <dt>Open actions</dt>
-          <dd>{detail?.openActions.length ?? selected.openActionCount}</dd>
+          <dd>{openActionCount}</dd>
         </div>
         <div>
           <dt>Next action</dt>
-          <dd>{selected.nextActionTitle ?? 'None'}</dd>
+          <dd>{nextActionTitle}</dd>
         </div>
       </dl>
+      </div>
 
-      <form className="edit-box" onSubmit={onSubmit}>
+      <form className="panel edit-box" onSubmit={onSubmit}>
         <div>
           <h3>Profile</h3>
           <p>Borrower contact and record status.</p>
@@ -2520,7 +3316,7 @@ function CustomerContextPanel({
         </button>
       </form>
 
-      <form className="add-loan-box" onSubmit={onSubmitLoan}>
+      <form className="panel add-loan-box" onSubmit={onSubmitLoan}>
         <div>
           <h3>Add loan</h3>
           <p>Create another file for this customer.</p>
@@ -2730,7 +3526,7 @@ function CustomerContextPanel({
         </button>
       </form>
 
-      <div className="activity-feed">
+      <div className="panel activity-feed">
         <h3>Loans</h3>
         {(detail?.loans.length ? detail.loans : []).map((loan) => (
           <button className="context-row" key={loan.loanNumber} type="button" onClick={() => onOpenLoan(loan.loanNumber)}>
@@ -2755,7 +3551,7 @@ function CustomerContextPanel({
         {detail && detail.loans.length === 0 && <p>No loans yet.</p>}
       </div>
 
-      <div className="activity-feed">
+      <div className="panel activity-feed">
         <h3>Open actions</h3>
         {(detail?.openActions.length ? detail.openActions : []).slice(0, 6).map((action) => (
           <button className="context-row" key={action.id} type="button" onClick={() => onOpenAction(action.id)}>
@@ -2771,7 +3567,7 @@ function CustomerContextPanel({
         ))}
         {detail && detail.openActions.length === 0 && <p>No open actions.</p>}
       </div>
-    </aside>
+    </section>
   )
 }
 
@@ -3109,6 +3905,80 @@ function IntakePage({
 
 function LoanContextPanel({
   action,
+  detail,
+  disabled,
+  onComplete,
+  onOpenDetail,
+}: {
+  action: DashboardAction | null
+  detail: LoanDetail | null
+  disabled: boolean
+  onComplete: () => void
+  onOpenDetail: () => void
+}) {
+  const selectedLoanAction = detail?.actions.find((item) => item.id === action?.id) ?? null
+  const loanActions = detail?.actions ?? []
+
+  if (!action) {
+    return (
+      <aside className="panel detail-panel">
+        <h2>Loan context</h2>
+        <p className="state-message">Select an action to review the loan.</p>
+      </aside>
+    )
+  }
+
+  return (
+    <aside className="panel detail-panel">
+      <div className="detail-header">
+        <span className={`status ${normalizeBucket(action.bucket)}`}>{action.bucket}</span>
+        <h2>{action.borrowerName}</h2>
+        <p>{action.loanNumber} - {sectionCopy[action.section] ?? action.section}</p>
+      </div>
+
+      <div className="detail-primary-actions">
+        <button className="detail-action" type="button" onClick={onOpenDetail}>Detail</button>
+        <button disabled={disabled} type="button" onClick={onComplete}>Complete</button>
+      </div>
+
+      <dl>
+        <div>
+          <dt>Action</dt>
+          <dd>{action.title}</dd>
+        </div>
+        <div>
+          <dt>Due date</dt>
+          <dd>{formatDueDate(action.dueDate)}</dd>
+        </div>
+        <div>
+          <dt>Priority</dt>
+          <dd>{action.priority}</dd>
+        </div>
+        <div>
+          <dt>Assignee</dt>
+          <dd>{selectedLoanAction?.assignedUserName ?? 'Unassigned'}</dd>
+        </div>
+        <div>
+          <dt>Loan stage</dt>
+          <dd>{detail?.stage ?? 'Loading'}</dd>
+        </div>
+        <div>
+          <dt>Target close</dt>
+          <dd>{formatDueDate(detail?.targetCloseDate ?? null)}</dd>
+        </div>
+        <div>
+          <dt>ICD status</dt>
+          <dd>{detail ? formatIcdStatus(detail.icdSent, detail.icdSigned) : 'Loading'}</dd>
+        </div>
+      </dl>
+
+      <LoanNeedsSummary actions={loanActions} />
+    </aside>
+  )
+}
+
+function ActionDetailPage({
+  action,
   cancelReason,
   detail,
   disabled,
@@ -3122,6 +3992,7 @@ function LoanContextPanel({
   templates,
   users,
   onAddNote,
+  onBack,
   onCancel,
   onCancelReasonChange,
   onComplete,
@@ -3157,6 +4028,7 @@ function LoanContextPanel({
   templates: ActionTemplateListItem[]
   users: UserListItem[]
   onAddNote: () => void
+  onBack: () => void
   onCancel: () => void
   onCancelReasonChange: (value: string) => void
   onComplete: () => void
@@ -3183,26 +4055,30 @@ function LoanContextPanel({
 
   if (!action) {
     return (
-      <aside className="panel detail-panel">
-        <h2>Loan context</h2>
+      <section className="panel action-detail-page">
+        <h2>Action detail</h2>
         <p className="state-message">Select an action to review the loan.</p>
-      </aside>
+      </section>
     )
   }
 
   return (
-    <aside className="panel detail-panel">
-      <div className="detail-header">
-        <span className={`status ${normalizeBucket(action.bucket)}`}>{action.bucket}</span>
-        <h2>{action.borrowerName}</h2>
-        <p>{action.loanNumber} - {sectionCopy[action.section] ?? action.section}</p>
+    <section className="action-detail-page">
+      <div className="panel loan-detail-hero">
+        <div>
+          <span className={`status ${normalizeBucket(action.bucket)}`}>{action.bucket}</span>
+          <h2>{action.title}</h2>
+          <p>{action.borrowerName} - {action.loanNumber} - {sectionCopy[action.section] ?? action.section}</p>
+        </div>
+        <button className="secondary" type="button" onClick={onBack}>Back to dashboard</button>
       </div>
 
-      <div className="detail-primary-actions">
-        <button disabled={disabled} type="button" onClick={onComplete}>Complete</button>
-      </div>
+      <section className="panel">
+        <div className="detail-primary-actions">
+          <button disabled={disabled} type="button" onClick={onComplete}>Complete</button>
+        </div>
 
-      <dl>
+      <dl className="detail-list">
         <div>
           <dt>Next step</dt>
           <dd>{action.title}</dd>
@@ -3272,10 +4148,13 @@ function LoanContextPanel({
           <dd>{selectedLoanAction?.assignedUserName ?? 'Unassigned'}</dd>
         </div>
       </dl>
+      </section>
 
+      <section className="panel">
       <LoanNeedsGroups actions={detail?.actions ?? []} />
+      </section>
 
-      <form className="edit-box" onSubmit={onLoanEditSubmit}>
+      <form className="panel edit-box" onSubmit={onLoanEditSubmit}>
         <div>
           <h3>Loan details</h3>
           <p>Stage, status, amount, and close timing.</p>
@@ -3395,7 +4274,7 @@ function LoanContextPanel({
         </button>
       </form>
 
-      <div className="email-draft-box">
+      <div className="panel email-draft-box">
         <div>
           <h3>Borrower email</h3>
           <p>Generate a draft for the selected condition.</p>
@@ -3434,7 +4313,7 @@ function LoanContextPanel({
         )}
       </div>
 
-      <div className="follow-up-box">
+      <div className="panel follow-up-box">
         <div>
           <h3>New follow-up</h3>
           <p>Add another condition or partner touch to this loan.</p>
@@ -3489,7 +4368,7 @@ function LoanContextPanel({
         </button>
       </div>
 
-      <div className="follow-up-box template-generate-box">
+      <div className="panel follow-up-box template-generate-box">
         <div>
           <h3>Generate from template</h3>
           <p>Create missing standardized actions for this loan.</p>
@@ -3518,7 +4397,7 @@ function LoanContextPanel({
         </button>
       </div>
 
-      <div className="reassign-box">
+      <div className="panel reassign-box">
         <label htmlFor="reassignUser">Reassign</label>
         <select
           disabled={disabled || users.length === 0}
@@ -3550,7 +4429,19 @@ function LoanContextPanel({
         </button>
       </div>
 
-      <div className="reschedule-box">
+      <div className="panel note-box">
+        <label htmlFor="noteDraft">File note</label>
+        <textarea
+          id="noteDraft"
+          onChange={(event) => onDraftChange(event.target.value)}
+          placeholder="Add a quick borrower, title, or realtor note"
+          rows={4}
+          value={noteDraft}
+        />
+        <button className="secondary" disabled={disabled || !noteDraft.trim()} type="button" onClick={onAddNote}>Add note</button>
+      </div>
+
+      <div className="panel reschedule-box">
         <label htmlFor="rescheduleDate">Reschedule</label>
         <div className="reschedule-controls">
           <input
@@ -3577,7 +4468,7 @@ function LoanContextPanel({
         />
       </div>
 
-      <div className="cancel-box">
+      <div className="panel cancel-box">
         <label htmlFor="cancelReason">Cancel action</label>
         <textarea
           id="cancelReason"
@@ -3597,19 +4488,7 @@ function LoanContextPanel({
         </button>
       </div>
 
-      <div className="note-box">
-        <label htmlFor="noteDraft">File note</label>
-        <textarea
-          id="noteDraft"
-          onChange={(event) => onDraftChange(event.target.value)}
-          placeholder="Add a quick borrower, title, or realtor note"
-          rows={4}
-          value={noteDraft}
-        />
-        <button className="secondary" disabled={disabled || !noteDraft.trim()} type="button" onClick={onAddNote}>Add note</button>
-      </div>
-
-      <div className="activity-feed">
+      <div className="panel activity-feed">
         <h3>Recent notes</h3>
         {(detail?.notes.length ? detail.notes : [{ body: 'No notes yet.', createdAtUtc: new Date().toISOString() }]).map((note, index) => (
           <p key={`${note.createdAtUtc}-${index}`}>
@@ -3619,7 +4498,7 @@ function LoanContextPanel({
         ))}
       </div>
 
-      <div className="activity-feed">
+      <div className="panel activity-feed">
         <h3>History</h3>
         {(detail?.history.length ? detail.history : []).slice(0, 4).map((event) => (
           <p key={`${event.actionId}-${event.occurredAtUtc}`}>
@@ -3628,7 +4507,7 @@ function LoanContextPanel({
           </p>
         ))}
       </div>
-    </aside>
+    </section>
   )
 }
 
