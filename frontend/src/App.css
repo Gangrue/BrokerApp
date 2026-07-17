@@ -1,0 +1,283 @@
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 248px 1fr;
+  background: #f5f7f8;
+  color: #182026;
+}
+
+.sidebar {
+  background: #ffffff;
+  border-right: 1px solid #dce3e7;
+  padding: 24px 18px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  margin-bottom: 32px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background: #234b5f;
+  color: #ffffff;
+  font-size: 13px;
+}
+
+nav {
+  display: grid;
+  gap: 6px;
+}
+
+nav a {
+  color: #53616b;
+  text-decoration: none;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 15px;
+}
+
+nav a.active,
+nav a:hover {
+  background: #e8f0f3;
+  color: #183746;
+}
+
+.workspace {
+  padding: 28px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: #6d7a83;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 0;
+  font-size: 30px;
+  line-height: 1.15;
+}
+
+h2 {
+  margin-bottom: 0;
+  font-size: 18px;
+}
+
+h3 {
+  margin-bottom: 6px;
+  font-size: 16px;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 6px;
+  background: #1f6f5b;
+  color: #ffffff;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+button.secondary {
+  width: 100%;
+  background: #234b5f;
+}
+
+input {
+  width: min(320px, 100%);
+  border: 1px solid #cbd6dc;
+  border-radius: 6px;
+  padding: 9px 10px;
+  color: #182026;
+  background: #ffffff;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.metrics article,
+.panel {
+  background: #ffffff;
+  border: 1px solid #dce3e7;
+  border-radius: 8px;
+}
+
+.metrics article {
+  padding: 18px;
+}
+
+.metrics span {
+  display: block;
+  color: #65747e;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.metrics strong {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  align-items: start;
+}
+
+.panel {
+  padding: 18px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.action-list {
+  display: grid;
+  gap: 10px;
+}
+
+.action-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid #e3eaee;
+  border-radius: 8px;
+}
+
+.action-row p {
+  margin-bottom: 0;
+  color: #61717b;
+}
+
+.state-message {
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed #cbd6dc;
+  border-radius: 8px;
+  color: #61717b;
+}
+
+.state-message.error {
+  border-color: #f1b7ad;
+  background: #fff6f4;
+  color: #9f2d20;
+}
+
+.status {
+  display: inline-block;
+  margin-bottom: 8px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status.overdue {
+  background: #fde7e3;
+  color: #9f2d20;
+}
+
+.status.due-today {
+  background: #fff0cf;
+  color: #7a5700;
+}
+
+.status.upcoming {
+  background: #e3f4ec;
+  color: #176145;
+}
+
+.priority {
+  white-space: nowrap;
+  color: #43515a;
+  font-size: 14px;
+}
+
+.detail-panel dl {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.detail-panel div {
+  border-bottom: 1px solid #edf1f3;
+  padding-bottom: 10px;
+}
+
+.detail-panel dt {
+  color: #687680;
+  font-size: 13px;
+}
+
+.detail-panel dd {
+  margin: 3px 0 0;
+  font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid #dce3e7;
+  }
+
+  nav {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    overflow-x: auto;
+  }
+
+  .topbar,
+  .panel-header,
+  .action-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .metrics,
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+}
