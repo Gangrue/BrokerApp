@@ -6,7 +6,8 @@ public sealed record ReportSummaryDto(
     IReadOnlyCollection<ReportBreakdownDto> OpenActionsBySection,
     IReadOnlyCollection<ReportBreakdownDto> OpenActionsByPriority,
     IReadOnlyCollection<ReportUpcomingClosingDto> UpcomingClosings,
-    IReadOnlyCollection<ReportAgingActionDto> OldestOpenActions);
+    IReadOnlyCollection<ReportAgingActionDto> OldestOpenActions,
+    IReadOnlyCollection<ReportActivityDto> RecentActivity);
 
 public sealed record ReportMetricDto(
     string Label,
@@ -32,3 +33,12 @@ public sealed record ReportAgingActionDto(
     string Priority,
     DateOnly DueDate,
     int DaysOpen);
+
+public sealed record ReportActivityDto(
+    Guid Id,
+    string EntityType,
+    string EntityId,
+    string Operation,
+    string ChangedFields,
+    string ActorName,
+    DateTimeOffset OccurredAtUtc);

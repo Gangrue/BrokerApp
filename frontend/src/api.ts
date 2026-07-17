@@ -119,6 +119,7 @@ export type ReportSummary = {
   openActionsByPriority: ReportBreakdown[]
   upcomingClosings: ReportUpcomingClosing[]
   oldestOpenActions: ReportAgingAction[]
+  recentActivity: ReportActivity[]
 }
 
 export type ReportMetric = {
@@ -148,6 +149,16 @@ export type ReportAgingAction = {
   priority: string
   dueDate: string
   daysOpen: number
+}
+
+export type ReportActivity = {
+  id: string
+  entityType: string
+  entityId: string
+  operation: string
+  changedFields: string
+  actorName: string
+  occurredAtUtc: string
 }
 
 export type CreateFileIntakeRequest = {

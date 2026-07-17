@@ -104,13 +104,31 @@ public sealed class ReportService : IReportService
                     : 0)))
             .ToArray();
 
+        var recentActivity = await _dbContext.AuditEvents
+            .AsNoTracking()
+            .Include(auditEvent => auditEvent.ActorUser)
+            .Where(auditEvent => auditEvent.OrganizationId == DevDataIds.OrganizationId)
+            .OrderByDescending(auditEvent => auditEvent.OccurredAtUtc)
+            .ThenByDescending(auditEvent => auditEvent.Id)
+            .Take(12)
+            .Select(auditEvent => new ReportActivityDto(
+                auditEvent.Id,
+                auditEvent.EntityType,
+                auditEvent.EntityId,
+                auditEvent.Operation,
+                auditEvent.ChangedFields,
+                auditEvent.ActorUser == null ? "System" : auditEvent.ActorUser.DisplayName,
+                auditEvent.OccurredAtUtc))
+            .ToArrayAsync(cancellationToken);
+
         return new ReportSummaryDto(
             metrics,
             pipelineByStage,
             openActionsBySection,
             openActionsByPriority,
             upcomingClosings,
-            oldestOpenActions);
+            oldestOpenActions,
+            recentActivity);
     }
 
     private static bool IsOpen(LoanAction action)

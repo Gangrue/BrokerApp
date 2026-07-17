@@ -783,6 +783,51 @@ select {
   font-size: 12px;
 }
 
+.activity-list {
+  display: grid;
+  gap: 10px;
+}
+
+.activity-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.45fr);
+  gap: 8px 14px;
+  padding: 12px;
+  border: 1px solid #e0e8ec;
+  background: #ffffff;
+}
+
+.activity-row span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.activity-row span:last-of-type {
+  justify-items: end;
+  text-align: right;
+}
+
+.activity-row strong,
+.activity-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-row small {
+  color: #687782;
+  font-size: 12px;
+}
+
+.activity-row p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #40505a;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .intake-page {
   display: grid;
   gap: 16px;
@@ -993,6 +1038,7 @@ select {
   .panel-header,
   .action-row,
   .customer-row,
+  .activity-row,
   .template-row,
   .two-column,
   .three-column,
@@ -1008,6 +1054,11 @@ select {
 
   .action-meta {
     justify-items: start;
+  }
+
+  .activity-row span:last-of-type {
+    justify-items: start;
+    text-align: left;
   }
 
   .workflow-actions,

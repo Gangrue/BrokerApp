@@ -251,7 +251,36 @@ public static class DevDataSeeder
             }
         }
 
+        if (!await dbContext.AuditEvents.AnyAsync(auditEvent => auditEvent.OrganizationId == DevDataIds.OrganizationId))
+        {
+            dbContext.AuditEvents.AddRange(
+                CreateAuditEvent("LoanAction", "ACT-1001", AuditOperations.Updated, "Due date refreshed from demo seed.", now.AddHours(-5)),
+                CreateAuditEvent("Loan", "LN-1004", AuditOperations.Updated, "Stage changed to Condition review.", now.AddHours(-3)),
+                CreateAuditEvent("ActionTemplate", "Purchase Processing", AuditOperations.Generated, "Generated borrower, title, and realtor conditions.", now.AddHours(-1)));
+        }
+
         await dbContext.SaveChangesAsync();
+    }
+
+    private static AuditEvent CreateAuditEvent(
+        string entityType,
+        string entityId,
+        string operation,
+        string changedFields,
+        DateTimeOffset occurredAtUtc)
+    {
+        return new AuditEvent
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = DevDataIds.OrganizationId,
+            ActorUserId = DevDataIds.LoanOfficerId,
+            EntityType = entityType,
+            EntityId = entityId,
+            Operation = operation,
+            ChangedFields = changedFields,
+            OccurredAtUtc = occurredAtUtc,
+            CorrelationId = Guid.NewGuid()
+        };
     }
 
     private sealed record DemoLoan(

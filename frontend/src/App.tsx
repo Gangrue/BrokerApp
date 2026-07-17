@@ -120,6 +120,7 @@ const emptyReportSummary: ReportSummary = {
   openActionsByPriority: [],
   upcomingClosings: [],
   oldestOpenActions: [],
+  recentActivity: [],
 }
 
 const sectionCopy: Record<string, string> = {
@@ -1577,6 +1578,31 @@ function ReportsPage({
           </div>
         </section>
       </div>
+
+      <section className="panel report-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Recent activity</h2>
+            <p>{summary.recentActivity.length} audit events</p>
+          </div>
+        </div>
+        <div className="activity-list">
+          {summary.recentActivity.map((activity) => (
+            <div className="activity-row" key={activity.id}>
+              <span>
+                <strong>{activity.operation}</strong>
+                <small>{activity.entityType} {activity.entityId}</small>
+              </span>
+              <span>
+                <strong>{activity.actorName}</strong>
+                <small>{formatDateTime(activity.occurredAtUtc)}</small>
+              </span>
+              <p>{activity.changedFields}</p>
+            </div>
+          ))}
+          {summary.recentActivity.length === 0 && <p className="state-message">No audited activity yet.</p>}
+        </div>
+      </section>
     </section>
   )
 }
