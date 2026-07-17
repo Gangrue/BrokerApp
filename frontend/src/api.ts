@@ -199,6 +199,31 @@ export type CreateFileIntakeResponse = {
   createdActionIds: string[]
 }
 
+export type CreateCustomerLoanRequest = {
+  loan: {
+    loanNumber: string
+    type: string
+    stage: string
+    amount: number | null
+    targetCloseDate: string | null
+  }
+  actions: Array<{
+    title: string
+    section: string
+    priority: string
+    dueDate: string
+    description: string | null
+  }>
+  initialNote: string | null
+  templateId?: string | null
+}
+
+export type CreateCustomerLoanResponse = {
+  loanNumber: string
+  borrowerName: string
+  createdActionIds: string[]
+}
+
 export type CreateLoanActionRequest = {
   title: string
   section: string
@@ -243,6 +268,14 @@ export type ActionTemplateListItem = {
 }
 
 export type UserListItem = {
+  id: string
+  displayName: string
+  email: string
+  role: string
+  isActive: boolean
+}
+
+export type CurrentUser = {
   id: string
   displayName: string
   email: string
@@ -379,6 +412,10 @@ export function getUsers() {
   return getJson<UserListItem[]>('/api/v1/users')
 }
 
+export function getCurrentUser() {
+  return getJson<CurrentUser>('/api/v1/users/me')
+}
+
 export function getActionTemplate(id: string) {
   return getJson<ActionTemplateDetail>(`/api/v1/action-templates/${encodeURIComponent(id)}`)
 }
@@ -401,6 +438,10 @@ export function updateActionTemplate(id: string, request: UpsertActionTemplateRe
 
 export function createFileIntake(request: CreateFileIntakeRequest) {
   return postJson<CreateFileIntakeResponse>('/api/v1/intake/files', request)
+}
+
+export function createCustomerLoan(customerId: string, request: CreateCustomerLoanRequest) {
+  return postJson<CreateCustomerLoanResponse>(`/api/v1/customers/${encodeURIComponent(customerId)}/loans`, request)
 }
 
 export function createLoanAction(loanNumber: string, request: CreateLoanActionRequest) {

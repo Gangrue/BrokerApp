@@ -1,4 +1,5 @@
 using BrokerApp.Api.Features.Customers;
+using BrokerApp.Api.Features.Intake;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BrokerApp.Api.Controllers;
@@ -41,6 +42,28 @@ public sealed class CustomersController : ControllerBase
             return customer is null ? NotFound() : Ok(customer);
         }
         catch (CustomerValidationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
+    [HttpPost("{id:guid}/loans")]
+    public async Task<ActionResult<CreateCustomerLoanResponse>> CreateLoan(
+        Guid id,
+        CreateCustomerLoanRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _customerService.CreateLoanAsync(id, request, cancellationToken);
+
+            return result is null ? NotFound() : Ok(result);
+        }
+        catch (CustomerValidationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+        catch (IntakeValidationException exception)
         {
             return BadRequest(new { message = exception.Message });
         }

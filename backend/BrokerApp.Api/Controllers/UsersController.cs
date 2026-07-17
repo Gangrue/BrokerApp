@@ -19,4 +19,12 @@ public sealed class UsersController : ControllerBase
     {
         return Ok(await _userService.GetUsersAsync(cancellationToken));
     }
+
+    [HttpGet("me")]
+    public async Task<ActionResult<CurrentUserDto>> GetCurrentUser(CancellationToken cancellationToken)
+    {
+        var user = await _userService.GetCurrentUserAsync(cancellationToken);
+
+        return user is null ? NotFound() : Ok(user);
+    }
 }

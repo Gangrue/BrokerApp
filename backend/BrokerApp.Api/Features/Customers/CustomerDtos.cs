@@ -1,3 +1,5 @@
+using BrokerApp.Api.Features.Intake;
+
 namespace BrokerApp.Api.Features.Customers;
 
 public sealed record CustomerListItemDto(
@@ -46,3 +48,14 @@ public sealed record UpdateCustomerRequest(
     string? Email,
     string? Phone,
     string Status);
+
+public sealed record CreateCustomerLoanRequest(
+    IntakeLoanRequest Loan,
+    IReadOnlyCollection<IntakeActionRequest> Actions,
+    string? InitialNote,
+    Guid? TemplateId = null);
+
+public sealed record CreateCustomerLoanResponse(
+    string LoanNumber,
+    string BorrowerName,
+    IReadOnlyCollection<string> CreatedActionIds);

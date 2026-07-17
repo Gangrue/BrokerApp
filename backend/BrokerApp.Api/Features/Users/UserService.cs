@@ -6,6 +6,7 @@ namespace BrokerApp.Api.Features.Users;
 public interface IUserService
 {
     Task<IReadOnlyCollection<UserListItemDto>> GetUsersAsync(CancellationToken cancellationToken = default);
+    Task<CurrentUserDto?> GetCurrentUserAsync(CancellationToken cancellationToken = default);
 }
 
 public sealed class UserService : IUserService
@@ -30,5 +31,19 @@ public sealed class UserService : IUserService
                 user.Role,
                 user.IsActive))
             .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task<CurrentUserDto?> GetCurrentUserAsync(CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.Users
+            .AsNoTracking()
+            .Where(user => user.OrganizationId == DevDataIds.OrganizationId && user.Id == DevDataIds.LoanOfficerId)
+            .Select(user => new CurrentUserDto(
+                user.Id,
+                user.DisplayName,
+                user.Email,
+                user.Role,
+                user.IsActive))
+            .SingleOrDefaultAsync(cancellationToken);
     }
 }

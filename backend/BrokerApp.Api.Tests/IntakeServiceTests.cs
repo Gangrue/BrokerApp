@@ -186,9 +186,19 @@ public sealed class IntakeServiceTests
         return new IntakeService(
             dbContext,
             new FixedClock(today),
+            CreateLoanFileCreationService(dbContext, today),
+            CreateAuditWriter(dbContext, today));
+    }
+
+    private static LoanFileCreationService CreateLoanFileCreationService(BrokerAppDbContext dbContext, DateOnly today)
+    {
+        var clock = new FixedClock(today);
+        return new LoanFileCreationService(
+            dbContext,
+            clock,
             new ActionPublicIdGenerator(dbContext),
             CreateTemplateService(dbContext, today),
-            CreateAuditWriter(dbContext, today));
+            new AuditWriter(dbContext, clock));
     }
 
     private static ActionTemplateService CreateTemplateService(BrokerAppDbContext dbContext, DateOnly today)

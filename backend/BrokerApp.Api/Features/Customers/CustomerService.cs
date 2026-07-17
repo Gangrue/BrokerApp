@@ -2,6 +2,7 @@ using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
 using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
+using BrokerApp.Api.Features.Intake;
 using Microsoft.EntityFrameworkCore;
 
 namespace BrokerApp.Api.Features.Customers;
@@ -10,6 +11,7 @@ public interface ICustomerService
 {
     Task<IReadOnlyCollection<CustomerListItemDto>> GetCustomersAsync(CancellationToken cancellationToken = default);
     Task<CustomerDetailDto?> GetCustomerAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<CreateCustomerLoanResponse?> CreateLoanAsync(Guid id, CreateCustomerLoanRequest request, CancellationToken cancellationToken = default);
     Task<CustomerDetailDto?> UpdateCustomerAsync(Guid id, UpdateCustomerRequest request, CancellationToken cancellationToken = default);
 }
 
@@ -18,12 +20,18 @@ public sealed class CustomerService : ICustomerService
     private readonly BrokerAppDbContext _dbContext;
     private readonly IAuditWriter _auditWriter;
     private readonly ISystemClock _clock;
+    private readonly ILoanFileCreationService _loanFileCreationService;
 
-    public CustomerService(BrokerAppDbContext dbContext, IAuditWriter auditWriter, ISystemClock clock)
+    public CustomerService(
+        BrokerAppDbContext dbContext,
+        IAuditWriter auditWriter,
+        ISystemClock clock,
+        ILoanFileCreationService loanFileCreationService)
     {
         _dbContext = dbContext;
         _auditWriter = auditWriter;
         _clock = clock;
+        _loanFileCreationService = loanFileCreationService;
     }
 
     public async Task<IReadOnlyCollection<CustomerListItemDto>> GetCustomersAsync(CancellationToken cancellationToken = default)
@@ -125,6 +133,43 @@ public sealed class CustomerService : ICustomerService
             customer.Status,
             loans,
             actions);
+    }
+
+    public async Task<CreateCustomerLoanResponse?> CreateLoanAsync(
+        Guid id,
+        CreateCustomerLoanRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null)
+        {
+            throw new CustomerValidationException("Loan information is required.");
+        }
+
+        var customer = await _dbContext.Customers.SingleOrDefaultAsync(
+            item => item.OrganizationId == DevDataIds.OrganizationId && item.Id == id,
+            cancellationToken);
+
+        if (customer is null)
+        {
+            return null;
+        }
+
+        if (customer.Status != "Active")
+        {
+            throw new CustomerValidationException("Only active customers can receive new loans.");
+        }
+
+        var result = await _loanFileCreationService.CreateLoanForCustomerAsync(
+            customer,
+            new LoanFileCreationRequest(request.Loan, request.Actions, request.InitialNote, request.TemplateId),
+            "Created from customer workspace.",
+            "Loan created from customer workspace.",
+            cancellationToken);
+
+        return new CreateCustomerLoanResponse(
+            result.LoanNumber,
+            result.BorrowerName,
+            result.CreatedActionIds);
     }
 
     public async Task<CustomerDetailDto?> UpdateCustomerAsync(

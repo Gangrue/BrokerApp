@@ -6,3 +6,10 @@ public sealed record UserListItemDto(
     string Email,
     string Role,
     bool IsActive);
+
+public sealed record CurrentUserDto(
+    Guid Id,
+    string DisplayName,
+    string Email,
+    string Role,
+    bool IsActive);

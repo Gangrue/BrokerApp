@@ -5,6 +5,7 @@ import {
   cancelAction,
   completeAction,
   createActionTemplate,
+  createCustomerLoan,
   createFileIntake,
   createLoanAction,
   generateLoanActions,
@@ -13,6 +14,7 @@ import {
   getActionTemplates,
   getCustomer,
   getCustomers,
+  getCurrentUser,
   getDashboard,
   getLoan,
   getLoans,
@@ -28,6 +30,7 @@ import type {
   ActionTemplateDetail,
   ActionTemplateListItem,
   ActionEmailDraft,
+  CurrentUser,
   DashboardAction,
   DashboardSummary,
   CustomerDetail,
@@ -40,8 +43,9 @@ import type {
 } from './api'
 import './App.css'
 
-type WorkspaceView = 'dashboard' | 'loans' | 'customers' | 'reports' | 'admin' | 'intake'
+type WorkspaceView = 'dashboard' | 'loans' | 'customers' | 'reports' | 'admin' | 'account' | 'intake'
 type QueueFilter = 'all' | 'overdue' | 'today' | 'high'
+type BorrowerMode = 'new' | 'existing'
 
 type IntakeActionForm = {
   title: string
@@ -52,6 +56,8 @@ type IntakeActionForm = {
 }
 
 type IntakeFormState = {
+  borrowerMode: BorrowerMode
+  existingCustomerId: string
   firstName: string
   lastName: string
   email: string
@@ -214,6 +220,8 @@ function emptyLoanEditForm(): LoanEditForm {
 
 function emptyIntakeForm(): IntakeFormState {
   return {
+    borrowerMode: 'new',
+    existingCustomerId: '',
     firstName: '',
     lastName: '',
     email: '',
@@ -279,6 +287,27 @@ function optionalText(value: string) {
   return trimmed ? trimmed : null
 }
 
+function buildCustomerLoanRequest(form: IntakeFormState) {
+  return {
+    loan: {
+      loanNumber: form.loanNumber.trim(),
+      type: form.type,
+      stage: form.stage,
+      amount: form.amount.trim() ? Number(form.amount) : null,
+      targetCloseDate: optionalText(form.targetCloseDate),
+    },
+    actions: form.templateId ? [] : form.actions.map((action) => ({
+      title: action.title.trim(),
+      section: action.section,
+      priority: action.priority,
+      dueDate: action.dueDate,
+      description: optionalText(action.description),
+    })),
+    initialNote: optionalText(form.initialNote),
+    templateId: optionalText(form.templateId),
+  }
+}
+
 function App() {
   const [dashboard, setDashboard] = useState<DashboardSummary>(emptyDashboard)
   const [loans, setLoans] = useState<LoanListItem[]>([])
@@ -286,12 +315,14 @@ function App() {
   const [reportSummary, setReportSummary] = useState<ReportSummary>(emptyReportSummary)
   const [templates, setTemplates] = useState<ActionTemplateListItem[]>([])
   const [users, setUsers] = useState<UserListItem[]>([])
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [loanDetail, setLoanDetail] = useState<LoanDetail | null>(null)
   const [customerDetail, setCustomerDetail] = useState<CustomerDetail | null>(null)
   const [templateDetail, setTemplateDetail] = useState<ActionTemplateDetail | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null)
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
+  const [selectedLoanNumber, setSelectedLoanNumber] = useState<string | null>(null)
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [view, setView] = useState<WorkspaceView>('dashboard')
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('all')
@@ -302,15 +333,18 @@ function App() {
   const [reassignUserId, setReassignUserId] = useState('')
   const [reassignReason, setReassignReason] = useState('')
   const [intakeForm, setIntakeForm] = useState<IntakeFormState>(() => emptyIntakeForm())
+  const [customerLoanForm, setCustomerLoanForm] = useState<IntakeFormState>(() => emptyIntakeForm())
   const [followUpAction, setFollowUpAction] = useState<FollowUpActionForm>(() => emptyFollowUpAction())
   const [templateForm, setTemplateForm] = useState<TemplateFormState>(() => emptyTemplateForm())
   const [customerEditForm, setCustomerEditForm] = useState<CustomerEditForm>(() => emptyCustomerEditForm())
   const [loanEditForm, setLoanEditForm] = useState<LoanEditForm>(() => emptyLoanEditForm())
   const [emailDraft, setEmailDraft] = useState<ActionEmailDraft | null>(null)
+  const [isEmailSendConfirmOpen, setIsEmailSendConfirmOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isMutating, setIsMutating] = useState(false)
   const [isGeneratingEmailDraft, setIsGeneratingEmailDraft] = useState(false)
   const [isSubmittingIntake, setIsSubmittingIntake] = useState(false)
+  const [isSubmittingCustomerLoan, setIsSubmittingCustomerLoan] = useState(false)
   const [isSavingTemplate, setIsSavingTemplate] = useState(false)
   const [isSavingCustomer, setIsSavingCustomer] = useState(false)
   const [isSavingLoan, setIsSavingLoan] = useState(false)
@@ -318,13 +352,14 @@ function App() {
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
 
   async function loadWorkspace(preferredActionId?: string | null) {
-    const [dashboardSummary, loanRows, customerRows, reportRows, templateRows, userRows] = await Promise.all([
+    const [dashboardSummary, loanRows, customerRows, reportRows, templateRows, userRows, activeUser] = await Promise.all([
       getDashboard(),
       getLoans(),
       getCustomers(),
       getReportSummary(),
       getActionTemplates(),
       getUsers(),
+      getCurrentUser(),
     ])
     setDashboard(dashboardSummary)
     setLoans(loanRows)
@@ -332,6 +367,7 @@ function App() {
     setReportSummary(reportRows)
     setTemplates(templateRows)
     setUsers(userRows)
+    setCurrentUser(activeUser)
 
     const nextSelectedActionId = preferredActionId
       && dashboardSummary.openActions.some((action) => action.id === preferredActionId)
@@ -342,6 +378,9 @@ function App() {
     setSelectedCustomerId((current) => current && customerRows.some((customer) => customer.id === current)
       ? current
       : customerRows[0]?.id ?? null)
+    setSelectedLoanNumber((current) => current && loanRows.some((loan) => loan.loanNumber === current)
+      ? current
+      : loanRows[0]?.loanNumber ?? null)
     setSelectedTemplateId((current) => current && templateRows.some((template) => template.id === current)
       ? current
       : templateRows[0]?.id ?? null)
@@ -475,6 +514,12 @@ function App() {
     ?? null
   ), [filteredCustomers, selectedCustomerId])
 
+  const selectedLoan = useMemo(() => (
+    filteredLoans.find((loan) => loan.loanNumber === selectedLoanNumber)
+    ?? filteredLoans[0]
+    ?? null
+  ), [filteredLoans, selectedLoanNumber])
+
   const selectedTemplate = useMemo(() => (
     filteredTemplates.find((template) => template.id === selectedTemplateId)
     ?? filteredTemplates[0]
@@ -483,7 +528,28 @@ function App() {
 
   useEffect(() => {
     setEmailDraft(null)
+    setIsEmailSendConfirmOpen(false)
   }, [selectedAction?.id])
+
+  useEffect(() => {
+    if (view !== 'loans') {
+      return
+    }
+
+    setSelectedLoanNumber((current) => current && filteredLoans.some((loan) => loan.loanNumber === current)
+      ? current
+      : filteredLoans[0]?.loanNumber ?? null)
+  }, [filteredLoans, view])
+
+  useEffect(() => {
+    setIntakeForm((current) => current.existingCustomerId || customers.length === 0
+      ? current
+      : { ...current, existingCustomerId: customers[0].id })
+  }, [customers])
+
+  useEffect(() => {
+    setCustomerLoanForm(emptyIntakeForm())
+  }, [selectedCustomer?.id])
 
   useEffect(() => {
     let isMounted = true
@@ -513,6 +579,34 @@ function App() {
       isMounted = false
     }
   }, [selectedAction])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadSelectedLoanDetail() {
+      if (view !== 'loans' || !selectedLoan) {
+        return
+      }
+
+      try {
+        const detail = await getLoan(selectedLoan.loanNumber)
+
+        if (isMounted) {
+          setLoanDetail(detail)
+        }
+      } catch (caughtError) {
+        if (isMounted) {
+          setError(caughtError instanceof Error ? caughtError.message : 'Loan detail request failed')
+        }
+      }
+    }
+
+    void loadSelectedLoanDetail()
+
+    return () => {
+      isMounted = false
+    }
+  }, [selectedLoan, view])
 
   useEffect(() => {
     if (!loanDetail) {
@@ -737,19 +831,30 @@ function App() {
     })()
   }
 
-  function copyEmailDraft() {
+  function updateEmailDraftField(field: keyof ActionEmailDraft, value: string) {
+    setEmailDraft((current) => current ? { ...current, [field]: value } : current)
+  }
+
+  function requestSendEmailDraft() {
     if (!emailDraft) {
       return
     }
 
-    void (async () => {
-      try {
-        await navigator.clipboard.writeText(`To: ${emailDraft.to}\nSubject: ${emailDraft.subject}\n\n${emailDraft.body}`)
-        setWorkflowMessage('Email draft copied.')
-      } catch {
-        setError('Unable to copy email draft.')
-      }
-    })()
+    setIsEmailSendConfirmOpen(true)
+  }
+
+  function confirmSendEmailDraft() {
+    if (!emailDraft) {
+      setIsEmailSendConfirmOpen(false)
+      return
+    }
+
+    setIsEmailSendConfirmOpen(false)
+    setWorkflowMessage(`Email sent to ${emailDraft.to || 'borrower'}.`)
+  }
+
+  function discardEmailSend() {
+    setIsEmailSendConfirmOpen(false)
   }
 
   function updateFollowUpAction(field: keyof FollowUpActionForm, value: string) {
@@ -977,8 +1082,24 @@ function App() {
     }))
   }
 
+  function updateCustomerLoanField(field: keyof Omit<IntakeFormState, 'actions'>, value: string) {
+    setCustomerLoanForm((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
   function updateIntakeAction(index: number, field: keyof IntakeActionForm, value: string) {
     setIntakeForm((current) => ({
+      ...current,
+      actions: current.actions.map((action, actionIndex) => (
+        actionIndex === index ? { ...action, [field]: value } : action
+      )),
+    }))
+  }
+
+  function updateCustomerLoanAction(index: number, field: keyof IntakeActionForm, value: string) {
+    setCustomerLoanForm((current) => ({
       ...current,
       actions: current.actions.map((action, actionIndex) => (
         actionIndex === index ? { ...action, [field]: value } : action
@@ -995,8 +1116,26 @@ function App() {
         })
   }
 
+  function addCustomerLoanAction() {
+    setCustomerLoanForm((current) => current.actions.length >= 3
+      ? current
+      : {
+          ...current,
+          actions: [...current.actions, emptyIntakeAction()],
+        })
+  }
+
   function removeIntakeAction(index: number) {
     setIntakeForm((current) => current.actions.length <= 1
+      ? current
+      : {
+          ...current,
+          actions: current.actions.filter((_, actionIndex) => actionIndex !== index),
+        })
+  }
+
+  function removeCustomerLoanAction(index: number) {
+    setCustomerLoanForm((current) => current.actions.length <= 1
       ? current
       : {
           ...current,
@@ -1010,31 +1149,25 @@ function App() {
     setWorkflowMessage(null)
     setError(null)
 
+    if (intakeForm.borrowerMode === 'existing' && !intakeForm.existingCustomerId) {
+      setError('Select an existing customer before creating the loan.')
+      setIsSubmittingIntake(false)
+      return
+    }
+
     try {
-      const response = await createFileIntake({
-        customer: {
-          firstName: intakeForm.firstName.trim(),
-          lastName: intakeForm.lastName.trim(),
-          email: optionalText(intakeForm.email),
-          phone: optionalText(intakeForm.phone),
-        },
-        loan: {
-          loanNumber: intakeForm.loanNumber.trim(),
-          type: intakeForm.type,
-          stage: intakeForm.stage,
-          amount: intakeForm.amount.trim() ? Number(intakeForm.amount) : null,
-          targetCloseDate: optionalText(intakeForm.targetCloseDate),
-        },
-        actions: intakeForm.templateId ? [] : intakeForm.actions.map((action) => ({
-          title: action.title.trim(),
-          section: action.section,
-          priority: action.priority,
-          dueDate: action.dueDate,
-          description: optionalText(action.description),
-        })),
-        initialNote: optionalText(intakeForm.initialNote),
-        templateId: optionalText(intakeForm.templateId),
-      })
+      const loanRequest = buildCustomerLoanRequest(intakeForm)
+      const response = intakeForm.borrowerMode === 'existing'
+        ? await createCustomerLoan(intakeForm.existingCustomerId, loanRequest)
+        : await createFileIntake({
+            customer: {
+              firstName: intakeForm.firstName.trim(),
+              lastName: intakeForm.lastName.trim(),
+              email: optionalText(intakeForm.email),
+              phone: optionalText(intakeForm.phone),
+            },
+            ...loanRequest,
+          })
 
       await loadWorkspace(response.createdActionIds[0] ?? null)
       setLoanDetail(await getLoan(response.loanNumber))
@@ -1042,13 +1175,45 @@ function App() {
       setIntakeForm(emptyIntakeForm())
       setView('dashboard')
       setWorkflowMessage(
-        `${response.loanNumber} created for ${response.borrowerName}${response.customerMatched ? ' using existing borrower.' : '.'}`,
+        `${response.loanNumber} created for ${response.borrowerName}${'customerMatched' in response && response.customerMatched ? ' using existing borrower.' : '.'}`,
       )
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Intake request failed')
     } finally {
       setIsSubmittingIntake(false)
     }
+  }
+
+  async function submitCustomerLoan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!selectedCustomer) {
+      return
+    }
+
+    setIsSubmittingCustomerLoan(true)
+    setWorkflowMessage(null)
+    setError(null)
+
+    try {
+      const response = await createCustomerLoan(selectedCustomer.id, buildCustomerLoanRequest(customerLoanForm))
+      const preferredActionId = response.createdActionIds[0] ?? null
+      await loadWorkspace(preferredActionId)
+      setLoanDetail(await getLoan(response.loanNumber))
+      setSelectedActionId(preferredActionId)
+      setCustomerLoanForm(emptyIntakeForm())
+      setView('dashboard')
+      setWorkflowMessage(`${response.loanNumber} added for ${response.borrowerName}.`)
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Customer loan request failed')
+    } finally {
+      setIsSubmittingCustomerLoan(false)
+    }
+  }
+
+  function logOutPrototypeSession() {
+    setWorkflowMessage('Logged out of prototype session. Login page is planned next.')
+    setView('account')
   }
 
   return (
@@ -1077,10 +1242,18 @@ function App() {
           <button className={view === 'admin' ? 'active' : ''} type="button" onClick={() => setView('admin')}>
             Admin
           </button>
+          <button className={view === 'account' ? 'active' : ''} type="button" onClick={() => setView('account')}>
+            My Account
+          </button>
         </nav>
-        <div className="sidebar-summary">
-          <span>Queue health</span>
-          <strong>{dashboard.overdueCount === 0 ? 'On track' : `${dashboard.overdueCount} overdue`}</strong>
+        <div className="sidebar-footer">
+          <div className="sidebar-summary">
+            <span>Queue health</span>
+            <strong>{dashboard.overdueCount === 0 ? 'On track' : `${dashboard.overdueCount} overdue`}</strong>
+          </div>
+          <button className="logout-button" type="button" onClick={logOutPrototypeSession}>
+            Log out
+          </button>
         </div>
       </aside>
 
@@ -1094,6 +1267,7 @@ function App() {
             {view === 'customers' && 'Customers'}
             {view === 'reports' && 'Reports'}
             {view === 'admin' && 'Admin templates'}
+            {view === 'account' && 'My Account'}
             {view === 'intake' && 'New file intake'}
             </h1>
           </div>
@@ -1114,7 +1288,7 @@ function App() {
           </div>
         </header>
 
-        {view !== 'intake' && (
+        {view !== 'intake' && view !== 'account' && (
           <section className="metrics" aria-label="Action summary">
             <article className="metric-overdue">
               <span>Overdue</span>
@@ -1143,6 +1317,7 @@ function App() {
 
         {view === 'intake' ? (
           <IntakePage
+            customers={customers.filter((customer) => customer.status === 'Active')}
             disabled={isSubmittingIntake}
             form={intakeForm}
             templates={templates.filter((template) => template.isActive)}
@@ -1223,9 +1398,9 @@ function App() {
               onAddNote={addNote}
               onCancel={cancelSelectedAction}
               onComplete={completeSelectedAction}
-              onCopyEmailDraft={copyEmailDraft}
               onCreateFollowUpAction={submitFollowUpAction}
               onDraftChange={setNoteDraft}
+              onEmailDraftChange={updateEmailDraftField}
               onFollowUpActionChange={updateFollowUpAction}
               onGenerateEmailDraft={generateEmailDraftForSelectedAction}
               onGenerateTemplateActions={generateTemplateActionsForSelectedLoan}
@@ -1238,6 +1413,7 @@ function App() {
               onRescheduleDateChange={setRescheduleDate}
               onRescheduleReasonChange={setRescheduleReason}
               onReschedule={rescheduleSelectedAction}
+              onSendEmailDraft={requestSendEmailDraft}
               cancelReason={cancelReason}
               reassignReason={reassignReason}
               reassignUserId={reassignUserId}
@@ -1253,6 +1429,16 @@ function App() {
                   <h2>Borrower directory</h2>
                   <p>{filteredCustomers.length} visible</p>
                 </div>
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() => {
+                    setIntakeForm(emptyIntakeForm())
+                    setView('intake')
+                  }}
+                >
+                  Add New Customer
+                </button>
               </div>
               {isLoading && <p className="state-message">Loading customers...</p>}
               {error && <p className="state-message error">{error}</p>}
@@ -1291,18 +1477,26 @@ function App() {
             </div>
 
             <CustomerContextPanel
+              addLoanForm={customerLoanForm}
               customerForm={customerEditForm}
               detail={customerDetail}
               disabled={isSavingCustomer}
+              isSubmittingLoan={isSubmittingCustomerLoan}
+              templates={templates.filter((template) => template.isActive)}
+              onAddLoanAction={addCustomerLoanAction}
               onOpenAction={(actionId) => {
                 setView('dashboard')
                 setSelectedActionId(actionId)
               }}
               onOpenLoan={(loanNumber) => {
-                setView('dashboard')
-                setSelectedActionId(dashboard.openActions.find((action) => action.loanNumber === loanNumber)?.id ?? null)
+                setSelectedLoanNumber(loanNumber)
+                setView('loans')
               }}
+              onRemoveLoanAction={removeCustomerLoanAction}
+              onSubmitLoan={submitCustomerLoan}
               onSubmit={submitCustomerEdit}
+              onUpdateLoanAction={updateCustomerLoanAction}
+              onUpdateLoanField={updateCustomerLoanField}
               onUpdateField={updateCustomerEditField}
               selected={selectedCustomer}
             />
@@ -1319,6 +1513,8 @@ function App() {
             }}
             summary={reportSummary}
           />
+        ) : view === 'account' ? (
+          <MyAccountPage currentUser={currentUser} onLogOut={logOutPrototypeSession} />
         ) : view === 'admin' ? (
           <AdminTemplatesPage
             disabled={isSavingTemplate}
@@ -1335,44 +1531,216 @@ function App() {
             onUpdateItem={updateTemplateItem}
           />
         ) : (
-          <section className="panel pipeline-panel">
-            <div className="panel-header">
-              <div>
-                <h2>Pipeline snapshot</h2>
-                <p>{filteredLoans.length} active loans</p>
-              </div>
-            </div>
-            <div className="pipeline-table" role="table" aria-label="Loan pipeline">
-              <div className="pipeline-heading" role="row">
-                <span>Borrower</span>
-                <span>Loan</span>
-                <span>Stage</span>
-                <span>Next action</span>
-                <span>Due</span>
-              </div>
-              {filteredLoans.map((loan) => (
+          <section className="content-grid">
+            <div className="panel pipeline-panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Pipeline snapshot</h2>
+                  <p>{filteredLoans.length} active loans</p>
+                </div>
                 <button
-                  className="pipeline-row"
-                  key={loan.loanNumber}
-                  onClick={() => {
-                    setView('dashboard')
-                    setSelectedActionId(dashboard.openActions.find((action) => action.loanNumber === loan.loanNumber)?.id ?? null)
-                  }}
-                  role="row"
+                  className="secondary"
                   type="button"
+                  onClick={() => {
+                    setIntakeForm(emptyIntakeForm())
+                    setView('intake')
+                  }}
                 >
-                  <span>{loan.borrowerName}</span>
-                  <span>{loan.loanNumber}</span>
-                  <span>{loan.stage}</span>
-                  <span>{loan.nextActionTitle ?? 'No open action'}</span>
-                  <span>{formatDueDate(loan.nextActionDueDate)}</span>
+                  Add New Loan
                 </button>
-              ))}
+              </div>
+              <div className="pipeline-table" role="table" aria-label="Loan pipeline">
+                <div className="pipeline-heading" role="row">
+                  <span>Borrower</span>
+                  <span>Loan</span>
+                  <span>Stage</span>
+                  <span>Next action</span>
+                  <span>Due</span>
+                </div>
+                {filteredLoans.map((loan) => (
+                  <button
+                    className={`pipeline-row ${selectedLoan?.loanNumber === loan.loanNumber ? 'selected' : ''}`}
+                    key={loan.loanNumber}
+                    onClick={() => setSelectedLoanNumber(loan.loanNumber)}
+                    role="row"
+                    type="button"
+                  >
+                    <span>{loan.borrowerName}</span>
+                    <span>{loan.loanNumber}</span>
+                    <span>{loan.stage}</span>
+                    <span>{loan.nextActionTitle ?? 'No open action'}</span>
+                    <span>{formatDueDate(loan.nextActionDueDate)}</span>
+                  </button>
+                ))}
+              </div>
             </div>
+
+            <LoanPipelineDetailPanel
+              detail={loanDetail}
+              selected={selectedLoan}
+              onOpenAction={(actionId) => {
+                setView('dashboard')
+                setSelectedActionId(actionId)
+              }}
+            />
           </section>
         )}
       </section>
+      {isEmailSendConfirmOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <div aria-modal="true" className="confirmation-modal" role="dialog" aria-labelledby="sendEmailTitle">
+            <h2 id="sendEmailTitle">Send email?</h2>
+            <p>Are you sure you want to send this email?</p>
+            <div className="modal-actions">
+              <button type="button" onClick={confirmSendEmailDraft}>Send</button>
+              <button className="secondary" type="button" onClick={discardEmailSend}>Discard</button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
+  )
+}
+
+function LoanPipelineDetailPanel({
+  detail,
+  onOpenAction,
+  selected,
+}: {
+  detail: LoanDetail | null
+  onOpenAction: (actionId: string) => void
+  selected: LoanListItem | null
+}) {
+  if (!selected) {
+    return (
+      <aside className="panel detail-panel">
+        <h2>Loan details</h2>
+        <p className="state-message">Select a loan to review details and actions.</p>
+      </aside>
+    )
+  }
+
+  const actions = detail?.loanNumber === selected.loanNumber ? detail.actions : []
+  const notes = detail?.loanNumber === selected.loanNumber ? detail.notes : []
+  const history = detail?.loanNumber === selected.loanNumber ? detail.history : []
+
+  return (
+    <aside className="panel detail-panel loan-pipeline-detail">
+      <div className="detail-header">
+        <span className="status upcoming">{selected.status}</span>
+        <h2>{selected.borrowerName}</h2>
+        <p>{selected.loanNumber} - {selected.stage}</p>
+      </div>
+
+      <dl>
+        <div>
+          <dt>Open actions</dt>
+          <dd>{selected.openActionCount}</dd>
+        </div>
+        <div>
+          <dt>Next action</dt>
+          <dd>{selected.nextActionTitle ?? 'None'}</dd>
+        </div>
+        <div>
+          <dt>Target close</dt>
+          <dd>{formatDueDate(detail?.targetCloseDate ?? null)}</dd>
+        </div>
+        <div>
+          <dt>Borrower email</dt>
+          <dd>{detail?.borrowerEmail ?? 'Not available'}</dd>
+        </div>
+      </dl>
+
+      <div className="activity-feed">
+        <h3>Actions</h3>
+        {actions.map((action) => (
+          <button className="context-row" key={action.id} type="button" onClick={() => onOpenAction(action.id)}>
+            <span>
+              <strong>{action.title}</strong>
+              <small>{action.section} - {action.workflowStatus}</small>
+            </span>
+            <span>
+              <strong>{formatDueDate(action.dueDate)}</strong>
+              <small>{action.priority}</small>
+            </span>
+          </button>
+        ))}
+        {actions.length === 0 && <p>No actions yet.</p>}
+      </div>
+
+      <div className="activity-feed">
+        <h3>Recent notes</h3>
+        {notes.slice(0, 4).map((note, index) => (
+          <p key={`${note.createdAtUtc}-${index}`}>
+            <strong>{formatDateTime(note.createdAtUtc)}</strong>
+            <span>{note.body}</span>
+          </p>
+        ))}
+        {notes.length === 0 && <p>No notes yet.</p>}
+      </div>
+
+      <div className="activity-feed">
+        <h3>History</h3>
+        {history.slice(0, 4).map((event) => (
+          <p key={`${event.actionId}-${event.occurredAtUtc}`}>
+            <strong>{formatDateTime(event.occurredAtUtc)}</strong>
+            <span>{event.actionId}: {event.eventType}</span>
+          </p>
+        ))}
+        {history.length === 0 && <p>No history yet.</p>}
+      </div>
+    </aside>
+  )
+}
+
+function MyAccountPage({
+  currentUser,
+  onLogOut,
+}: {
+  currentUser: CurrentUser | null
+  onLogOut: () => void
+}) {
+  return (
+    <section className="account-page">
+      <div className="panel account-panel">
+        <div className="panel-header">
+          <div>
+            <h2>User profile</h2>
+            <p>{currentUser?.isActive ? 'Active session' : 'No active user loaded'}</p>
+          </div>
+          <button className="secondary" type="button" onClick={onLogOut}>
+            Log out
+          </button>
+        </div>
+
+        {currentUser ? (
+          <div className="account-grid">
+            <div className="readonly-field">
+              <span>Display name</span>
+              <strong>{currentUser.displayName}</strong>
+            </div>
+            <div className="readonly-field">
+              <span>Email</span>
+              <strong>{currentUser.email}</strong>
+            </div>
+            <div className="readonly-field">
+              <span>Role</span>
+              <strong>{currentUser.role}</strong>
+            </div>
+            <div className="readonly-field">
+              <span>Status</span>
+              <strong>{currentUser.isActive ? 'Active' : 'Inactive'}</strong>
+            </div>
+            <div className="readonly-field wide">
+              <span>User ID</span>
+              <strong>{currentUser.id}</strong>
+            </div>
+          </div>
+        ) : (
+          <p className="state-message">User profile is unavailable.</p>
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -1690,21 +2058,37 @@ function BreakdownPanel({
 }
 
 function CustomerContextPanel({
+  addLoanForm,
   customerForm,
   detail,
   disabled,
+  isSubmittingLoan,
+  templates,
+  onAddLoanAction,
   onOpenAction,
   onOpenLoan,
+  onRemoveLoanAction,
+  onSubmitLoan,
   onSubmit,
+  onUpdateLoanAction,
+  onUpdateLoanField,
   onUpdateField,
   selected,
 }: {
+  addLoanForm: IntakeFormState
   customerForm: CustomerEditForm
   detail: CustomerDetail | null
   disabled: boolean
+  isSubmittingLoan: boolean
+  templates: ActionTemplateListItem[]
+  onAddLoanAction: () => void
   onOpenAction: (actionId: string) => void
   onOpenLoan: (loanNumber: string) => void
+  onRemoveLoanAction: (index: number) => void
+  onSubmitLoan: (event: FormEvent<HTMLFormElement>) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  onUpdateLoanAction: (index: number, field: keyof IntakeActionForm, value: string) => void
+  onUpdateLoanField: (field: keyof Omit<IntakeFormState, 'actions'>, value: string) => void
   onUpdateField: (field: keyof CustomerEditForm, value: string) => void
   selected: CustomerListItem | null
 }) {
@@ -1716,6 +2100,8 @@ function CustomerContextPanel({
       </aside>
     )
   }
+
+  const loanDisabled = disabled || isSubmittingLoan
 
   return (
     <aside className="panel detail-panel customer-detail-panel">
@@ -1793,6 +2179,146 @@ function CustomerContextPanel({
         </button>
       </form>
 
+      <form className="add-loan-box" onSubmit={onSubmitLoan}>
+        <div>
+          <h3>Add loan</h3>
+          <p>Create another file for this customer.</p>
+        </div>
+        <div className="form-grid two-column">
+          <label>
+            Loan number
+            <input
+              disabled={loanDisabled}
+              onChange={(event) => onUpdateLoanField('loanNumber', event.target.value)}
+              required
+              value={addLoanForm.loanNumber}
+            />
+          </label>
+          <label>
+            Type
+            <select disabled={loanDisabled} onChange={(event) => onUpdateLoanField('type', event.target.value)} value={addLoanForm.type}>
+              {loanTypes.map((loanType) => <option key={loanType}>{loanType}</option>)}
+            </select>
+          </label>
+          <label>
+            Stage
+            <select disabled={loanDisabled} onChange={(event) => onUpdateLoanField('stage', event.target.value)} value={addLoanForm.stage}>
+              {loanStages.map((stage) => <option key={stage}>{stage}</option>)}
+            </select>
+          </label>
+          <label>
+            Amount
+            <input
+              disabled={loanDisabled}
+              min="0"
+              onChange={(event) => onUpdateLoanField('amount', event.target.value)}
+              step="1000"
+              type="number"
+              value={addLoanForm.amount}
+            />
+          </label>
+          <label>
+            Target close
+            <input
+              disabled={loanDisabled}
+              onChange={(event) => onUpdateLoanField('targetCloseDate', event.target.value)}
+              type="date"
+              value={addLoanForm.targetCloseDate}
+            />
+          </label>
+          <label>
+            Template
+            <select disabled={loanDisabled} onChange={(event) => onUpdateLoanField('templateId', event.target.value)} value={addLoanForm.templateId}>
+              <option value="">Manual actions</option>
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name} - {template.itemCount} items
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="template-items-header">
+          <h3>Initial actions</h3>
+          <button className="secondary" disabled={loanDisabled || Boolean(addLoanForm.templateId) || addLoanForm.actions.length >= 3} type="button" onClick={onAddLoanAction}>
+            Add action
+          </button>
+        </div>
+        <div className="intake-actions">
+          {addLoanForm.actions.map((action, index) => (
+            <div className="intake-action" key={index}>
+              <div className="intake-action-header">
+                <strong>Action {index + 1}</strong>
+                <button
+                  className="ghost"
+                  disabled={loanDisabled || Boolean(addLoanForm.templateId) || addLoanForm.actions.length === 1}
+                  type="button"
+                  onClick={() => onRemoveLoanAction(index)}
+                >
+                  Remove
+                </button>
+              </div>
+              <div className="form-grid two-column">
+                <label>
+                  Title
+                  <input
+                    disabled={loanDisabled || Boolean(addLoanForm.templateId)}
+                    onChange={(event) => onUpdateLoanAction(index, 'title', event.target.value)}
+                    required={!addLoanForm.templateId}
+                    value={action.title}
+                  />
+                </label>
+                <label>
+                  Section
+                  <select disabled={loanDisabled || Boolean(addLoanForm.templateId)} onChange={(event) => onUpdateLoanAction(index, 'section', event.target.value)} value={action.section}>
+                    {actionSections.map((section) => <option key={section}>{section}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Priority
+                  <select disabled={loanDisabled || Boolean(addLoanForm.templateId)} onChange={(event) => onUpdateLoanAction(index, 'priority', event.target.value)} value={action.priority}>
+                    {actionPriorities.map((priority) => <option key={priority}>{priority}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Due date
+                  <input
+                    disabled={loanDisabled || Boolean(addLoanForm.templateId)}
+                    onChange={(event) => onUpdateLoanAction(index, 'dueDate', event.target.value)}
+                    required={!addLoanForm.templateId}
+                    type="date"
+                    value={action.dueDate}
+                  />
+                </label>
+                <label className="span-all">
+                  Description
+                  <textarea
+                    disabled={loanDisabled || Boolean(addLoanForm.templateId)}
+                    onChange={(event) => onUpdateLoanAction(index, 'description', event.target.value)}
+                    rows={3}
+                    value={action.description}
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <label className="full-width-label">
+          Initial note
+          <textarea
+            disabled={loanDisabled}
+            onChange={(event) => onUpdateLoanField('initialNote', event.target.value)}
+            rows={3}
+            value={addLoanForm.initialNote}
+          />
+        </label>
+        <button className="secondary" disabled={loanDisabled} type="submit">
+          {isSubmittingLoan ? 'Adding loan...' : 'Add loan'}
+        </button>
+      </form>
+
       <div className="activity-feed">
         <h3>Loans</h3>
         {(detail?.loans.length ? detail.loans : []).map((loan) => (
@@ -1831,6 +2357,7 @@ function CustomerContextPanel({
 }
 
 function IntakePage({
+  customers,
   disabled,
   form,
   templates,
@@ -1840,6 +2367,7 @@ function IntakePage({
   onUpdateAction,
   onUpdateField,
 }: {
+  customers: CustomerListItem[]
   disabled: boolean
   form: IntakeFormState
   templates: ActionTemplateListItem[]
@@ -1855,9 +2383,31 @@ function IntakePage({
         <div className="panel-header">
           <div>
             <h2>Borrower</h2>
-            <p>{form.email.trim() ? 'Email match will reuse an active customer' : 'New customer'}</p>
+            <p>{form.borrowerMode === 'existing' ? 'Add this file to an existing customer' : form.email.trim() ? 'Email match will reuse an active customer' : 'New customer'}</p>
           </div>
         </div>
+        <div className="segmented-control borrower-mode-control" aria-label="Borrower mode">
+          <button className={form.borrowerMode === 'new' ? 'active' : ''} disabled={disabled} type="button" onClick={() => onUpdateField('borrowerMode', 'new')}>
+            New borrower
+          </button>
+          <button className={form.borrowerMode === 'existing' ? 'active' : ''} disabled={disabled || customers.length === 0} type="button" onClick={() => onUpdateField('borrowerMode', 'existing')}>
+            Existing customer
+          </button>
+        </div>
+        {form.borrowerMode === 'existing' ? (
+          <div className="form-grid two-column">
+            <label>
+              Customer
+              <select disabled={disabled || customers.length === 0} onChange={(event) => onUpdateField('existingCustomerId', event.target.value)} required value={form.existingCustomerId}>
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.borrowerName} - {customer.email ?? 'No email'}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ) : (
         <div className="form-grid two-column">
           <label>
             First name
@@ -1895,6 +2445,7 @@ function IntakePage({
             />
           </label>
         </div>
+        )}
       </section>
 
       <section className="panel intake-section">
@@ -2085,9 +2636,9 @@ function LoanContextPanel({
   onCancel,
   onCancelReasonChange,
   onComplete,
-  onCopyEmailDraft,
   onCreateFollowUpAction,
   onDraftChange,
+  onEmailDraftChange,
   onFollowUpActionChange,
   onGenerateEmailDraft,
   onGenerateTemplateActions,
@@ -2099,6 +2650,7 @@ function LoanContextPanel({
   onRescheduleDateChange,
   onRescheduleReasonChange,
   onReschedule,
+  onSendEmailDraft,
   rescheduleDate,
   rescheduleReason,
 }: {
@@ -2119,9 +2671,9 @@ function LoanContextPanel({
   onCancel: () => void
   onCancelReasonChange: (value: string) => void
   onComplete: () => void
-  onCopyEmailDraft: () => void
   onCreateFollowUpAction: () => void
   onDraftChange: (value: string) => void
+  onEmailDraftChange: (field: keyof ActionEmailDraft, value: string) => void
   onFollowUpActionChange: (field: keyof FollowUpActionForm, value: string) => void
   onGenerateEmailDraft: () => void
   onGenerateTemplateActions: (templateId: string) => void
@@ -2133,6 +2685,7 @@ function LoanContextPanel({
   onRescheduleDateChange: (value: string) => void
   onRescheduleReasonChange: (value: string) => void
   onReschedule: () => void
+  onSendEmailDraft: () => void
   rescheduleDate: string
   rescheduleReason: string
 }) {
@@ -2254,17 +2807,24 @@ function LoanContextPanel({
           <div className="email-draft-preview">
             <label>
               To
-              <input readOnly value={emailDraft.to || 'No borrower email on file'} />
+              <input onChange={(event) => onEmailDraftChange('to', event.target.value)} value={emailDraft.to} />
             </label>
             <label>
               Subject
-              <input readOnly value={emailDraft.subject} />
+              <input onChange={(event) => onEmailDraftChange('subject', event.target.value)} value={emailDraft.subject} />
             </label>
             <label>
               Body
-              <textarea readOnly rows={8} value={emailDraft.body} />
+              <textarea onChange={(event) => onEmailDraftChange('body', event.target.value)} rows={8} value={emailDraft.body} />
             </label>
-            <button className="secondary" type="button" onClick={onCopyEmailDraft}>Copy draft</button>
+            <button
+              className="secondary"
+              disabled={!emailDraft.to.trim() || !emailDraft.subject.trim() || !emailDraft.body.trim()}
+              type="button"
+              onClick={onSendEmailDraft}
+            >
+              Send Email
+            </button>
           </div>
         )}
       </div>
