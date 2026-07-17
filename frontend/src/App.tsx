@@ -897,6 +897,41 @@ function App() {
     })()
   }
 
+  function submitLoanPageAction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!selectedLoan || !followUpAction.title.trim() || !followUpAction.dueDate) {
+      return
+    }
+
+    const loanNumber = selectedLoan.loanNumber
+
+    void (async () => {
+      setIsMutating(true)
+      setWorkflowMessage(null)
+      setError(null)
+
+      try {
+        const response = await createLoanAction(loanNumber, {
+          title: followUpAction.title.trim(),
+          section: followUpAction.section,
+          priority: followUpAction.priority,
+          dueDate: followUpAction.dueDate,
+          description: optionalText(followUpAction.description),
+        })
+        await loadWorkspace(response.id)
+        setSelectedLoanNumber(response.loanNumber)
+        setLoanDetail(await getLoan(response.loanNumber))
+        setFollowUpAction(emptyFollowUpAction())
+        setWorkflowMessage(`Action ${response.id} added to ${loanNumber}.`)
+      } catch (caughtError) {
+        setError(caughtError instanceof Error ? caughtError.message : 'Create action request failed')
+      } finally {
+        setIsMutating(false)
+      }
+    })()
+  }
+
   function updateLoanEditField(field: keyof LoanEditForm, value: string) {
     setLoanEditForm((current) => ({
       ...current,
@@ -1282,7 +1317,7 @@ function App() {
                   placeholder="Search loans or borrowers"
                   value={searchTerm}
                 />
-                <button type="button" onClick={() => setView('intake')}>New action</button>
+                <button type="button" onClick={() => setView('intake')}>New Intake</button>
               </>
             )}
           </div>
@@ -1576,8 +1611,12 @@ function App() {
             </div>
 
             <LoanPipelineDetailPanel
+              actionForm={followUpAction}
               detail={loanDetail}
+              disabled={isMutating}
               selected={selectedLoan}
+              onActionChange={updateFollowUpAction}
+              onCreateAction={submitLoanPageAction}
               onOpenAction={(actionId) => {
                 setView('dashboard')
                 setSelectedActionId(actionId)
@@ -1603,11 +1642,19 @@ function App() {
 }
 
 function LoanPipelineDetailPanel({
+  actionForm,
   detail,
+  disabled,
+  onActionChange,
+  onCreateAction,
   onOpenAction,
   selected,
 }: {
+  actionForm: FollowUpActionForm
   detail: LoanDetail | null
+  disabled: boolean
+  onActionChange: (field: keyof FollowUpActionForm, value: string) => void
+  onCreateAction: (event: FormEvent<HTMLFormElement>) => void
   onOpenAction: (actionId: string) => void
   selected: LoanListItem | null
 }) {
@@ -1650,6 +1697,57 @@ function LoanPipelineDetailPanel({
           <dd>{detail?.borrowerEmail ?? 'Not available'}</dd>
         </div>
       </dl>
+
+      <form className="create-action-box" onSubmit={onCreateAction}>
+        <div className="template-items-header">
+          <h3>Create action</h3>
+          <button disabled={disabled || !actionForm.title.trim() || !actionForm.dueDate} type="submit">
+            Create Action
+          </button>
+        </div>
+        <div className="form-grid two-column">
+          <label>
+            Title
+            <input
+              disabled={disabled}
+              onChange={(event) => onActionChange('title', event.target.value)}
+              required
+              value={actionForm.title}
+            />
+          </label>
+          <label>
+            Section
+            <select disabled={disabled} onChange={(event) => onActionChange('section', event.target.value)} value={actionForm.section}>
+              {actionSections.map((section) => <option key={section}>{section}</option>)}
+            </select>
+          </label>
+          <label>
+            Priority
+            <select disabled={disabled} onChange={(event) => onActionChange('priority', event.target.value)} value={actionForm.priority}>
+              {actionPriorities.map((priority) => <option key={priority}>{priority}</option>)}
+            </select>
+          </label>
+          <label>
+            Due date
+            <input
+              disabled={disabled}
+              onChange={(event) => onActionChange('dueDate', event.target.value)}
+              required
+              type="date"
+              value={actionForm.dueDate}
+            />
+          </label>
+          <label className="span-all">
+            Description
+            <textarea
+              disabled={disabled}
+              onChange={(event) => onActionChange('description', event.target.value)}
+              rows={3}
+              value={actionForm.description}
+            />
+          </label>
+        </div>
+      </form>
 
       <div className="activity-feed">
         <h3>Actions</h3>
@@ -2709,6 +2807,10 @@ function LoanContextPanel({
         <p>{action.loanNumber} - {sectionCopy[action.section] ?? action.section}</p>
       </div>
 
+      <div className="detail-primary-actions">
+        <button disabled={disabled} type="button" onClick={onComplete}>Complete</button>
+      </div>
+
       <dl>
         <div>
           <dt>Next step</dt>
@@ -2785,10 +2887,6 @@ function LoanContextPanel({
           {disabled ? 'Saving...' : 'Save loan'}
         </button>
       </form>
-
-      <div className="workflow-actions">
-        <button disabled={disabled} type="button" onClick={onComplete}>Complete</button>
-      </div>
 
       <div className="email-draft-box">
         <div>

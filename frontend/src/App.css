@@ -496,6 +496,11 @@ select {
   font-size: 22px;
 }
 
+.detail-primary-actions {
+  display: grid;
+  margin: 14px 0 16px;
+}
+
 .detail-panel dl {
   display: grid;
   gap: 11px;
@@ -539,6 +544,16 @@ select {
 .follow-up-box {
   display: grid;
   gap: 9px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid #dce5e9;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.create-action-box {
+  display: grid;
+  gap: 12px;
   margin-bottom: 16px;
   padding: 12px;
   border: 1px solid #dce5e9;
