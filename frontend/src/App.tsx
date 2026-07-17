@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import {
   addActionComment,
   cancelAction,
@@ -49,6 +49,16 @@ import './App.css'
 
 type WorkspaceView = 'home' | 'dashboard' | 'actionDetail' | 'loans' | 'loanDetail' | 'customers' | 'customerDetail' | 'reports' | 'admin' | 'account' | 'intake'
 type QueueFilter = 'all' | 'overdue' | 'today' | 'high'
+type DashboardSpotlightFilter = 'overdue' | 'today' | 'upcoming' | 'open' | 'closing'
+type DashboardPanelFlash = 'closing' | 'icd'
+
+const dashboardSpotlightTitles: Record<DashboardSpotlightFilter, string> = {
+  closing: 'Closing within 7 days',
+  open: 'Open queue',
+  overdue: 'Overdue loans',
+  today: 'Due today',
+  upcoming: 'Upcoming loans',
+}
 type BorrowerMode = 'new' | 'existing'
 
 type IntakeActionForm = {
@@ -159,6 +169,18 @@ const sectionCopy: Record<string, string> = {
   Borrower: 'Borrower conditions',
   Title: 'Title conditions',
   Realtor: 'Realtor follow-up',
+}
+
+function loanListItemToDashboardLoanAlert(loan: LoanListItem): DashboardLoanAlert {
+  return {
+    borrowerName: loan.borrowerName,
+    daysToClose: loan.daysToClose,
+    icdSent: loan.icdSent,
+    icdSigned: loan.icdSigned,
+    loanNumber: loan.loanNumber,
+    loanOfficerName: loan.loanOfficerName,
+    targetCloseDate: loan.targetCloseDate,
+  }
 }
 
 const homeHeroSlides = [
@@ -439,6 +461,8 @@ function App() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [view, setView] = useState<WorkspaceView>('home')
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('all')
+  const [dashboardSpotlightFilter, setDashboardSpotlightFilter] = useState<DashboardSpotlightFilter>('closing')
+  const [dashboardPanelFlash, setDashboardPanelFlash] = useState<DashboardPanelFlash | null>(null)
   const [noteDraft, setNoteDraft] = useState('')
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [rescheduleReason, setRescheduleReason] = useState('')
@@ -637,6 +661,28 @@ function App() {
     ?? null
   ), [filteredLoans, selectedLoanNumber])
 
+  const dashboardSpotlightItems = useMemo(() => {
+    if (dashboardSpotlightFilter === 'closing') {
+      return dashboard.closingWithin7Days
+    }
+
+    const bucketByFilter: Partial<Record<DashboardSpotlightFilter, string>> = {
+      overdue: 'Overdue',
+      today: 'Due Today',
+      upcoming: 'Upcoming',
+    }
+    const targetBucket = bucketByFilter[dashboardSpotlightFilter]
+    const loanNumbers = new Set(
+      dashboard.openActions
+        .filter((action) => !targetBucket || action.bucket === targetBucket)
+        .map((action) => action.loanNumber),
+    )
+
+    return loans
+      .filter((loan) => loanNumbers.has(loan.loanNumber))
+      .map(loanListItemToDashboardLoanAlert)
+  }, [dashboard.closingWithin7Days, dashboard.openActions, dashboardSpotlightFilter, loans])
+
   const selectedTemplate = useMemo(() => (
     filteredTemplates.find((template) => template.id === selectedTemplateId)
     ?? filteredTemplates[0]
@@ -678,6 +724,16 @@ function App() {
     setLoanPage(0)
   }, [loans.length])
 
+  useEffect(() => {
+    if (!dashboardPanelFlash) {
+      return undefined
+    }
+
+    const timerId = window.setTimeout(() => setDashboardPanelFlash(null), 1000)
+
+    return () => window.clearTimeout(timerId)
+  }, [dashboardPanelFlash])
+
   function pageForIndex(index: number) {
     return index < 0 ? 0 : Math.floor(index / listPageSize)
   }
@@ -685,6 +741,24 @@ function App() {
   function openSidebarView(nextView: WorkspaceView) {
     setSearchTerm('')
     setView(nextView)
+  }
+
+  function flashDashboardPanel(panel: DashboardPanelFlash) {
+    setDashboardPanelFlash(null)
+    window.setTimeout(() => setDashboardPanelFlash(panel), 0)
+  }
+
+  function openDashboardSpotlight(filter: DashboardSpotlightFilter) {
+    setDashboardSpotlightFilter(filter)
+    setView('dashboard')
+    scrollWorkspaceToTop()
+    flashDashboardPanel('closing')
+  }
+
+  function openIcdAttention() {
+    setView('dashboard')
+    scrollWorkspaceToTop()
+    flashDashboardPanel('icd')
   }
 
   function openActionDetail() {
@@ -1552,7 +1626,7 @@ function App() {
 
       <section className="workspace" id="dashboard">
         <header className="topbar">
-          <div>
+          <div className="topbar-title">
             <p className="eyebrow">{view === 'intake' ? 'File intake' : view === 'home' ? 'Workspace home' : 'Daily workflow'}</p>
             <h1>
               {view === 'home' && 'Home'}
@@ -1589,36 +1663,36 @@ function App() {
 
         {view !== 'home' && view !== 'intake' && view !== 'account' && view !== 'loanDetail' && view !== 'customerDetail' && view !== 'actionDetail' && (
           <section className="metrics" aria-label="Action summary">
-            <article className="metric-overdue">
+            <button className="metric-card metric-overdue" type="button" onClick={() => openDashboardSpotlight('overdue')}>
               <span>Overdue</span>
               <strong>{dashboard.overdueCount}</strong>
               <small>Past business day</small>
-            </article>
-            <article className="metric-today">
+            </button>
+            <button className="metric-card metric-today" type="button" onClick={() => openDashboardSpotlight('today')}>
               <span>Due today</span>
               <strong>{dashboard.dueTodayCount}</strong>
               <small>Needs officer touch</small>
-            </article>
-            <article className="metric-upcoming">
+            </button>
+            <button className="metric-card metric-upcoming" type="button" onClick={() => openDashboardSpotlight('upcoming')}>
               <span>Upcoming</span>
               <strong>{dashboard.upcomingCount}</strong>
               <small>Within active queue</small>
-            </article>
-            <article>
+            </button>
+            <button className="metric-card" type="button" onClick={() => openDashboardSpotlight('open')}>
               <span>Open queue</span>
               <strong>{dashboard.openActions.length}</strong>
               <small>Visible work items</small>
-            </article>
-            <article>
+            </button>
+            <button className="metric-card" type="button" onClick={() => openDashboardSpotlight('closing')}>
               <span>Closing soon</span>
               <strong>{dashboard.closingWithin7DaysCount}</strong>
               <small>Within 7 days</small>
-            </article>
-            <article>
+            </button>
+            <button className="metric-card" type="button" onClick={openIcdAttention}>
               <span>ICD attention</span>
               <strong>{dashboard.icdNotSentOrSignedCount}</strong>
               <small>Not sent or unsigned</small>
-            </article>
+            </button>
           </section>
         )}
 
@@ -1643,6 +1717,7 @@ function App() {
             customerCount={customers.length}
             loanCount={loans.length}
             onOpenAdmin={() => setView('admin')}
+            onOpenCustomers={() => setView('customers')}
             onOpenDashboard={() => setView('dashboard')}
             onOpenIntake={() => setView('intake')}
             onOpenLoans={() => setView('loans')}
@@ -1653,11 +1728,32 @@ function App() {
           <>
           <section className="dashboard-alert-grid">
             <DashboardAlertList
-              items={dashboard.closingWithin7Days}
-              title="Closing within 7 days"
+              headerControl={(
+                <div className="segmented-control dashboard-alert-filter" aria-label="Closing panel filter">
+                  <button className={dashboardSpotlightFilter === 'overdue' ? 'active' : ''} type="button" onClick={() => setDashboardSpotlightFilter('overdue')}>
+                    Overdue
+                  </button>
+                  <button className={dashboardSpotlightFilter === 'today' ? 'active' : ''} type="button" onClick={() => setDashboardSpotlightFilter('today')}>
+                    Due today
+                  </button>
+                  <button className={dashboardSpotlightFilter === 'upcoming' ? 'active' : ''} type="button" onClick={() => setDashboardSpotlightFilter('upcoming')}>
+                    Upcoming
+                  </button>
+                  <button className={dashboardSpotlightFilter === 'open' ? 'active' : ''} type="button" onClick={() => setDashboardSpotlightFilter('open')}>
+                    Open queue
+                  </button>
+                  <button className={dashboardSpotlightFilter === 'closing' ? 'active' : ''} type="button" onClick={() => setDashboardSpotlightFilter('closing')}>
+                    Closing soon
+                  </button>
+                </div>
+              )}
+              isHighlighted={dashboardPanelFlash === 'closing'}
+              items={dashboardSpotlightItems}
+              title={dashboardSpotlightTitles[dashboardSpotlightFilter]}
               onOpenLoan={openLoanPipeline}
             />
             <DashboardAlertList
+              isHighlighted={dashboardPanelFlash === 'icd'}
               items={dashboard.icdNeedsAttention}
               title="ICD not sent/signed"
               onOpenLoan={openLoanPipeline}
@@ -1996,10 +2092,14 @@ function App() {
 }
 
 function DashboardAlertList({
+  headerControl,
+  isHighlighted = false,
   items,
   onOpenLoan,
   title,
 }: {
+  headerControl?: ReactNode
+  isHighlighted?: boolean
   items?: DashboardLoanAlert[]
   onOpenLoan: (loanNumber: string) => void
   title: string
@@ -2016,7 +2116,7 @@ function DashboardAlertList({
   }, [visibleItems.length])
 
   return (
-    <section className="panel dashboard-alert-panel">
+    <section className={`panel dashboard-alert-panel ${isHighlighted ? 'dashboard-panel-flash' : ''}`}>
       <div className="panel-header">
         <div>
           <h2>{title}</h2>
@@ -2025,6 +2125,7 @@ function DashboardAlertList({
             {visibleItems.length > pageSize ? ` - page ${currentPage + 1} of ${pageCount}` : ''}
           </p>
         </div>
+        {headerControl}
       </div>
       <div className="dashboard-alert-list">
         {pageItems.map((item) => (
@@ -2092,6 +2193,7 @@ function HomePage({
   dashboard,
   loanCount,
   onOpenAdmin,
+  onOpenCustomers,
   onOpenDashboard,
   onOpenIntake,
   onOpenLoans,
@@ -2103,6 +2205,7 @@ function HomePage({
   dashboard: DashboardSummary
   loanCount: number
   onOpenAdmin: () => void
+  onOpenCustomers: () => void
   onOpenDashboard: () => void
   onOpenIntake: () => void
   onOpenLoans: () => void
@@ -2173,26 +2276,26 @@ function HomePage({
       </section>
 
       <section className="home-summary-grid" aria-label="Workspace summary">
-        <article>
+        <button className="home-summary-card" type="button" onClick={onOpenDashboard}>
           <span>Open actions</span>
           <strong>{dashboard.openActions.length}</strong>
           <small>{dashboard.overdueCount} overdue, {dashboard.dueTodayCount} due today</small>
-        </article>
-        <article>
+        </button>
+        <button className="home-summary-card" type="button" onClick={onOpenLoans}>
           <span>Loans</span>
           <strong>{loanCount}</strong>
           <small>{dashboard.closingWithin7DaysCount} closing within 7 days</small>
-        </article>
-        <article>
+        </button>
+        <button className="home-summary-card" type="button" onClick={onOpenCustomers}>
           <span>Customers</span>
           <strong>{customerCount}</strong>
           <small>Existing borrowers can receive new loans</small>
-        </article>
-        <article>
+        </button>
+        <button className="home-summary-card" type="button" onClick={onOpenAdmin}>
           <span>Templates</span>
           <strong>{templateCount}</strong>
           <small>Reusable borrower/title/realtor action sets</small>
-        </article>
+        </button>
       </section>
 
       <section className="home-grid">
