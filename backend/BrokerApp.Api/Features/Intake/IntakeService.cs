@@ -1,6 +1,7 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
 using BrokerApp.Api.Features.Actions;
+using BrokerApp.Api.Features.ActionTemplates;
 using BrokerApp.Api.Features.Dashboard;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,15 +19,18 @@ public sealed class IntakeService : IIntakeService
     private readonly BrokerAppDbContext _dbContext;
     private readonly ISystemClock _clock;
     private readonly IActionPublicIdGenerator _actionPublicIdGenerator;
+    private readonly IActionTemplateService _actionTemplateService;
 
     public IntakeService(
         BrokerAppDbContext dbContext,
         ISystemClock clock,
-        IActionPublicIdGenerator actionPublicIdGenerator)
+        IActionPublicIdGenerator actionPublicIdGenerator,
+        IActionTemplateService actionTemplateService)
     {
         _dbContext = dbContext;
         _clock = clock;
         _actionPublicIdGenerator = actionPublicIdGenerator;
+        _actionTemplateService = actionTemplateService;
     }
 
     public async Task<CreateFileIntakeResponse> CreateFileAsync(
@@ -35,7 +39,7 @@ public sealed class IntakeService : IIntakeService
     {
         var customerInput = ValidateCustomer(request.Customer);
         var loanInput = ValidateLoan(request.Loan);
-        var actionInputs = ValidateActions(request.Actions);
+        var actionInputs = ValidateActions(request.Actions, request.TemplateId);
         var normalizedEmail = NormalizeOptional(customerInput.Email)?.ToLowerInvariant();
         var now = _clock.UtcNow;
 
@@ -90,6 +94,7 @@ public sealed class IntakeService : IIntakeService
         };
         _dbContext.Loans.Add(loan);
 
+        var createdActionIds = new List<string>();
         var actionIds = await _actionPublicIdGenerator.GenerateAsync(actionInputs.Count, cancellationToken);
 
         foreach (var actionInput in actionInputs.Zip(actionIds))
@@ -120,6 +125,18 @@ public sealed class IntakeService : IIntakeService
                 Reason = "Created during intake.",
                 OccurredAtUtc = now
             });
+            createdActionIds.Add(action.PublicId);
+        }
+
+        if (request.TemplateId is { } templateId)
+        {
+            var templateResult = await _actionTemplateService.AddTemplateActionsAsync(
+                loan,
+                templateId,
+                DateOnly.FromDateTime(now.Date),
+                "Generated during intake.",
+                cancellationToken);
+            createdActionIds.AddRange(templateResult.CreatedActionIds);
         }
 
         var initialNote = NormalizeOptional(request.InitialNote);
@@ -142,7 +159,7 @@ public sealed class IntakeService : IIntakeService
             loan.LoanNumber,
             $"{customer.LastName}, {customer.FirstName}",
             customerMatched,
-            actionIds);
+            createdActionIds);
     }
 
     private static ValidCustomerInput ValidateCustomer(IntakeCustomerRequest? customer)
@@ -175,11 +192,17 @@ public sealed class IntakeService : IIntakeService
     }
 
     private static IReadOnlyCollection<ValidActionInput> ValidateActions(
-        IReadOnlyCollection<IntakeActionRequest>? actions)
+        IReadOnlyCollection<IntakeActionRequest>? actions,
+        Guid? templateId)
     {
+        if ((actions is null || actions.Count == 0) && templateId is null)
+        {
+            throw new IntakeValidationException("At least one initial action or template is required.");
+        }
+
         if (actions is null || actions.Count == 0)
         {
-            throw new IntakeValidationException("At least one initial action is required.");
+            return [];
         }
 
         if (actions.Count > 3)

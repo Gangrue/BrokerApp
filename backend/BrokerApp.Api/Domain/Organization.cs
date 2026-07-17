@@ -12,4 +12,5 @@ public sealed class Organization
     public ICollection<Loan> Loans { get; set; } = [];
     public ICollection<LoanAction> Actions { get; set; } = [];
     public ICollection<LoanNote> Notes { get; set; } = [];
+    public ICollection<ActionTemplate> ActionTemplates { get; set; } = [];
 }

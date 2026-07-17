@@ -4,7 +4,8 @@ public sealed record CreateFileIntakeRequest(
     IntakeCustomerRequest Customer,
     IntakeLoanRequest Loan,
     IReadOnlyCollection<IntakeActionRequest> Actions,
-    string? InitialNote);
+    string? InitialNote,
+    Guid? TemplateId = null);
 
 public sealed record IntakeCustomerRequest(
     string FirstName,

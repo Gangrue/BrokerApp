@@ -7,6 +7,8 @@ public sealed class LoanAction
     public Organization Organization { get; set; } = null!;
     public Guid LoanId { get; set; }
     public Loan Loan { get; set; } = null!;
+    public Guid? ActionTemplateItemId { get; set; }
+    public ActionTemplateItem? ActionTemplateItem { get; set; }
     public Guid? AssignedUserId { get; set; }
     public AppUser? AssignedUser { get; set; }
     public string PublicId { get; set; } = string.Empty;

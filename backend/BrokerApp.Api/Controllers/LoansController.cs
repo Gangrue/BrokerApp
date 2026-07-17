@@ -1,3 +1,4 @@
+using BrokerApp.Api.Features.ActionTemplates;
 using BrokerApp.Api.Features.Loans;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,10 +9,12 @@ namespace BrokerApp.Api.Controllers;
 public sealed class LoansController : ControllerBase
 {
     private readonly ILoanService _loanService;
+    private readonly IActionTemplateService _actionTemplateService;
 
-    public LoansController(ILoanService loanService)
+    public LoansController(ILoanService loanService, IActionTemplateService actionTemplateService)
     {
         _loanService = loanService;
+        _actionTemplateService = actionTemplateService;
     }
 
     [HttpGet]
@@ -41,6 +44,24 @@ public sealed class LoansController : ControllerBase
             return action is null ? NotFound() : Ok(action);
         }
         catch (LoanValidationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
+    [HttpPost("{loanNumber}/generate-actions")]
+    public async Task<ActionResult<GenerateLoanActionsResponse>> GenerateActions(
+        string loanNumber,
+        GenerateLoanActionsRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _actionTemplateService.GenerateLoanActionsAsync(loanNumber, request, cancellationToken);
+
+            return result is null ? NotFound() : Ok(result);
+        }
+        catch (ActionTemplateValidationException exception)
         {
             return BadRequest(new { message = exception.Message });
         }

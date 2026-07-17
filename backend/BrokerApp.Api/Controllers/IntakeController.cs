@@ -1,3 +1,4 @@
+using BrokerApp.Api.Features.ActionTemplates;
 using BrokerApp.Api.Features.Intake;
 using Microsoft.AspNetCore.Mvc;
 
@@ -24,6 +25,10 @@ public sealed class IntakeController : ControllerBase
             return Ok(await _intakeService.CreateFileAsync(request, cancellationToken));
         }
         catch (IntakeValidationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+        catch (ActionTemplateValidationException exception)
         {
             return BadRequest(new { message = exception.Message });
         }

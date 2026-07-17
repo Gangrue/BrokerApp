@@ -30,8 +30,12 @@ public sealed class ActionPublicIdGenerator : IActionPublicIdGenerator
             .Where(action => action.OrganizationId == DevDataIds.OrganizationId && action.PublicId.StartsWith("ACT-"))
             .Select(action => action.PublicId)
             .ToArrayAsync(cancellationToken);
+        var trackedPublicIds = _dbContext.LoanActions.Local
+            .Where(action => action.OrganizationId == DevDataIds.OrganizationId && action.PublicId.StartsWith("ACT-"))
+            .Select(action => action.PublicId);
 
         var maxActionNumber = publicIds
+            .Concat(trackedPublicIds)
             .Select(ParseActionNumber)
             .Where(number => number > 0)
             .DefaultIfEmpty(FirstGeneratedActionNumber - 1)

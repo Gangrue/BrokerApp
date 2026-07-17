@@ -167,6 +167,7 @@ export type CreateFileIntakeRequest = {
     description: string | null
   }>
   initialNote: string | null
+  templateId?: string | null
 }
 
 export type CreateFileIntakeResponse = {
@@ -192,6 +193,56 @@ export type CreateLoanActionResponse = {
   section: string
   priority: string
   dueDate: string
+}
+
+export type ActionTemplateListItem = {
+  id: string
+  name: string
+  loanType: string
+  stage: string
+  isActive: boolean
+  itemCount: number
+}
+
+export type ActionTemplateDetail = {
+  id: string
+  name: string
+  loanType: string
+  stage: string
+  isActive: boolean
+  items: ActionTemplateItem[]
+}
+
+export type ActionTemplateItem = {
+  id: string
+  sortOrder: number
+  section: string
+  title: string
+  description: string | null
+  priority: string
+  dueOffsetDays: number
+}
+
+export type UpsertActionTemplateRequest = {
+  name: string
+  loanType: string
+  stage: string
+  isActive: boolean
+  items: Array<{
+    sortOrder: number
+    section: string
+    title: string
+    description: string | null
+    priority: string
+    dueOffsetDays: number
+  }>
+}
+
+export type GenerateLoanActionsResponse = {
+  loanNumber: string
+  templateId: string
+  createdActionIds: string[]
+  skippedCount: number
 }
 
 async function readErrorMessage(response: Response) {
@@ -230,6 +281,22 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return await response.json() as T
 }
 
+async function putJson<T>(url: string, body: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response))
+  }
+
+  return await response.json() as T
+}
+
 export function getDashboard() {
   return getJson<DashboardSummary>('/api/v1/dashboard')
 }
@@ -254,12 +321,34 @@ export function getReportSummary() {
   return getJson<ReportSummary>('/api/v1/reports/summary')
 }
 
+export function getActionTemplates() {
+  return getJson<ActionTemplateListItem[]>('/api/v1/action-templates')
+}
+
+export function getActionTemplate(id: string) {
+  return getJson<ActionTemplateDetail>(`/api/v1/action-templates/${encodeURIComponent(id)}`)
+}
+
+export function createActionTemplate(request: UpsertActionTemplateRequest) {
+  return postJson<ActionTemplateDetail>('/api/v1/action-templates', request)
+}
+
+export function updateActionTemplate(id: string, request: UpsertActionTemplateRequest) {
+  return putJson<ActionTemplateDetail>(`/api/v1/action-templates/${encodeURIComponent(id)}`, request)
+}
+
 export function createFileIntake(request: CreateFileIntakeRequest) {
   return postJson<CreateFileIntakeResponse>('/api/v1/intake/files', request)
 }
 
 export function createLoanAction(loanNumber: string, request: CreateLoanActionRequest) {
   return postJson<CreateLoanActionResponse>(`/api/v1/loans/${encodeURIComponent(loanNumber)}/actions`, request)
+}
+
+export function generateLoanActions(loanNumber: string, templateId: string) {
+  return postJson<GenerateLoanActionsResponse>(`/api/v1/loans/${encodeURIComponent(loanNumber)}/generate-actions`, {
+    templateId,
+  })
 }
 
 export function completeAction(publicId: string) {

@@ -3,8 +3,12 @@ import type { FormEvent } from 'react'
 import {
   addActionComment,
   completeAction,
+  createActionTemplate,
   createFileIntake,
   createLoanAction,
+  generateLoanActions,
+  getActionTemplate,
+  getActionTemplates,
   getCustomer,
   getCustomers,
   getDashboard,
@@ -12,8 +16,11 @@ import {
   getLoans,
   getReportSummary,
   rescheduleAction,
+  updateActionTemplate,
 } from './api'
 import type {
+  ActionTemplateDetail,
+  ActionTemplateListItem,
   DashboardAction,
   DashboardSummary,
   CustomerDetail,
@@ -21,10 +28,11 @@ import type {
   LoanDetail,
   LoanListItem,
   ReportSummary,
+  UpsertActionTemplateRequest,
 } from './api'
 import './App.css'
 
-type WorkspaceView = 'dashboard' | 'loans' | 'customers' | 'reports' | 'intake'
+type WorkspaceView = 'dashboard' | 'loans' | 'customers' | 'reports' | 'admin' | 'intake'
 type QueueFilter = 'all' | 'overdue' | 'today' | 'high'
 
 type IntakeActionForm = {
@@ -47,6 +55,7 @@ type IntakeFormState = {
   targetCloseDate: string
   actions: IntakeActionForm[]
   initialNote: string
+  templateId: string
 }
 
 type FollowUpActionForm = {
@@ -55,6 +64,24 @@ type FollowUpActionForm = {
   priority: string
   dueDate: string
   description: string
+}
+
+type TemplateItemForm = {
+  sortOrder: string
+  section: string
+  title: string
+  description: string
+  priority: string
+  dueOffsetDays: string
+}
+
+type TemplateFormState = {
+  id: string | null
+  name: string
+  loanType: string
+  stage: string
+  isActive: boolean
+  items: TemplateItemForm[]
 }
 
 const emptyDashboard: DashboardSummary = {
@@ -151,6 +178,51 @@ function emptyIntakeForm(): IntakeFormState {
     targetCloseDate: '',
     actions: [emptyIntakeAction()],
     initialNote: '',
+    templateId: '',
+  }
+}
+
+function emptyTemplateItem(sortOrder = 1): TemplateItemForm {
+  return {
+    sortOrder: String(sortOrder),
+    section: 'Borrower',
+    title: '',
+    description: '',
+    priority: 'Normal',
+    dueOffsetDays: String(sortOrder),
+  }
+}
+
+function emptyTemplateForm(): TemplateFormState {
+  return {
+    id: null,
+    name: '',
+    loanType: 'Purchase',
+    stage: 'New file',
+    isActive: true,
+    items: [
+      emptyTemplateItem(1),
+      { ...emptyTemplateItem(2), section: 'Title', title: '' },
+      { ...emptyTemplateItem(3), section: 'Realtor', title: '' },
+    ],
+  }
+}
+
+function templateDetailToForm(template: ActionTemplateDetail): TemplateFormState {
+  return {
+    id: template.id,
+    name: template.name,
+    loanType: template.loanType,
+    stage: template.stage,
+    isActive: template.isActive,
+    items: template.items.map((item) => ({
+      sortOrder: String(item.sortOrder),
+      section: item.section,
+      title: item.title,
+      description: item.description ?? '',
+      priority: item.priority,
+      dueOffsetDays: String(item.dueOffsetDays),
+    })),
   }
 }
 
@@ -165,11 +237,14 @@ function App() {
   const [loans, setLoans] = useState<LoanListItem[]>([])
   const [customers, setCustomers] = useState<CustomerListItem[]>([])
   const [reportSummary, setReportSummary] = useState<ReportSummary>(emptyReportSummary)
+  const [templates, setTemplates] = useState<ActionTemplateListItem[]>([])
   const [loanDetail, setLoanDetail] = useState<LoanDetail | null>(null)
   const [customerDetail, setCustomerDetail] = useState<CustomerDetail | null>(null)
+  const [templateDetail, setTemplateDetail] = useState<ActionTemplateDetail | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null)
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [view, setView] = useState<WorkspaceView>('dashboard')
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('all')
   const [noteDraft, setNoteDraft] = useState('')
@@ -177,23 +252,27 @@ function App() {
   const [rescheduleReason, setRescheduleReason] = useState('')
   const [intakeForm, setIntakeForm] = useState<IntakeFormState>(() => emptyIntakeForm())
   const [followUpAction, setFollowUpAction] = useState<FollowUpActionForm>(() => emptyFollowUpAction())
+  const [templateForm, setTemplateForm] = useState<TemplateFormState>(() => emptyTemplateForm())
   const [isLoading, setIsLoading] = useState(true)
   const [isMutating, setIsMutating] = useState(false)
   const [isSubmittingIntake, setIsSubmittingIntake] = useState(false)
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
 
   async function loadWorkspace(preferredActionId?: string | null) {
-    const [dashboardSummary, loanRows, customerRows, reportRows] = await Promise.all([
+    const [dashboardSummary, loanRows, customerRows, reportRows, templateRows] = await Promise.all([
       getDashboard(),
       getLoans(),
       getCustomers(),
       getReportSummary(),
+      getActionTemplates(),
     ])
     setDashboard(dashboardSummary)
     setLoans(loanRows)
     setCustomers(customerRows)
     setReportSummary(reportRows)
+    setTemplates(templateRows)
 
     const nextSelectedActionId = preferredActionId
       && dashboardSummary.openActions.some((action) => action.id === preferredActionId)
@@ -204,6 +283,9 @@ function App() {
     setSelectedCustomerId((current) => current && customerRows.some((customer) => customer.id === current)
       ? current
       : customerRows[0]?.id ?? null)
+    setSelectedTemplateId((current) => current && templateRows.some((template) => template.id === current)
+      ? current
+      : templateRows[0]?.id ?? null)
     return { dashboardSummary, nextSelectedActionId }
   }
 
@@ -305,6 +387,23 @@ function App() {
     )
   }, [customers, searchTerm])
 
+  const filteredTemplates = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase()
+
+    if (!query) {
+      return templates
+    }
+
+    return templates.filter((template) =>
+      [
+        template.name,
+        template.loanType,
+        template.stage,
+        template.isActive ? 'active' : 'inactive',
+      ].some((value) => value.toLowerCase().includes(query)),
+    )
+  }, [templates, searchTerm])
+
   const selectedAction = useMemo(() => (
     filteredActions.find((action) => action.id === selectedActionId)
     ?? filteredActions[0]
@@ -316,6 +415,12 @@ function App() {
     ?? filteredCustomers[0]
     ?? null
   ), [filteredCustomers, selectedCustomerId])
+
+  const selectedTemplate = useMemo(() => (
+    filteredTemplates.find((template) => template.id === selectedTemplateId)
+    ?? filteredTemplates[0]
+    ?? null
+  ), [filteredTemplates, selectedTemplateId])
 
   useEffect(() => {
     let isMounted = true
@@ -374,6 +479,39 @@ function App() {
       isMounted = false
     }
   }, [selectedCustomer, view])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadTemplateDetail() {
+      if (view !== 'admin' || !selectedTemplate) {
+        setTemplateDetail(null)
+        if (view === 'admin' && !selectedTemplate) {
+          setTemplateForm(emptyTemplateForm())
+        }
+        return
+      }
+
+      try {
+        const detail = await getActionTemplate(selectedTemplate.id)
+
+        if (isMounted) {
+          setTemplateDetail(detail)
+          setTemplateForm(templateDetailToForm(detail))
+        }
+      } catch (caughtError) {
+        if (isMounted) {
+          setError(caughtError instanceof Error ? caughtError.message : 'Template detail request failed')
+        }
+      }
+    }
+
+    void loadTemplateDetail()
+
+    return () => {
+      isMounted = false
+    }
+  }, [selectedTemplate, view])
 
   useEffect(() => {
     if (!selectedAction) {
@@ -493,6 +631,111 @@ function App() {
     })()
   }
 
+  function generateTemplateActionsForSelectedLoan(templateId: string) {
+    if (!selectedAction || !templateId) {
+      return
+    }
+
+    const loanNumber = selectedAction.loanNumber
+
+    void (async () => {
+      setIsMutating(true)
+      setWorkflowMessage(null)
+      setError(null)
+
+      try {
+        const response = await generateLoanActions(loanNumber, templateId)
+        const preferredActionId = response.createdActionIds[0] ?? selectedAction.id
+        await loadWorkspace(preferredActionId)
+        setLoanDetail(await getLoan(response.loanNumber))
+        setSelectedActionId(preferredActionId)
+        setWorkflowMessage(
+          `${response.createdActionIds.length} action${response.createdActionIds.length === 1 ? '' : 's'} generated, ${response.skippedCount} skipped.`,
+        )
+      } catch (caughtError) {
+        setError(caughtError instanceof Error ? caughtError.message : 'Template generation request failed')
+      } finally {
+        setIsMutating(false)
+      }
+    })()
+  }
+
+  function updateTemplateField(field: keyof Omit<TemplateFormState, 'items'>, value: string | boolean | null) {
+    setTemplateForm((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
+  function updateTemplateItem(index: number, field: keyof TemplateItemForm, value: string) {
+    setTemplateForm((current) => ({
+      ...current,
+      items: current.items.map((item, itemIndex) => (
+        itemIndex === index ? { ...item, [field]: value } : item
+      )),
+    }))
+  }
+
+  function addTemplateItem() {
+    setTemplateForm((current) => ({
+      ...current,
+      items: [...current.items, emptyTemplateItem(current.items.length + 1)],
+    }))
+  }
+
+  function removeTemplateItem(index: number) {
+    setTemplateForm((current) => ({
+      ...current,
+      items: current.items.length <= 1
+        ? current.items
+        : current.items.filter((_, itemIndex) => itemIndex !== index),
+    }))
+  }
+
+  function startNewTemplate() {
+    setSelectedTemplateId(null)
+    setTemplateDetail(null)
+    setTemplateForm(emptyTemplateForm())
+  }
+
+  async function submitTemplate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsSavingTemplate(true)
+    setWorkflowMessage(null)
+    setError(null)
+
+    const request: UpsertActionTemplateRequest = {
+      name: templateForm.name.trim(),
+      loanType: templateForm.loanType,
+      stage: templateForm.stage,
+      isActive: templateForm.isActive,
+      items: templateForm.items.map((item, index) => ({
+        sortOrder: Number(item.sortOrder) || index + 1,
+        section: item.section,
+        title: item.title.trim(),
+        description: optionalText(item.description),
+        priority: item.priority,
+        dueOffsetDays: Number(item.dueOffsetDays) || 0,
+      })),
+    }
+
+    try {
+      const saved = templateForm.id
+        ? await updateActionTemplate(templateForm.id, request)
+        : await createActionTemplate(request)
+      const templateRows = await getActionTemplates()
+      setTemplates(templateRows)
+      setSelectedTemplateId(saved.id)
+      setTemplateDetail(saved)
+      setTemplateForm(templateDetailToForm(saved))
+      setWorkflowMessage(`${saved.name} saved.`)
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Template save failed')
+    } finally {
+      setIsSavingTemplate(false)
+    }
+  }
+
   function updateIntakeField(field: keyof Omit<IntakeFormState, 'actions'>, value: string) {
     setIntakeForm((current) => ({
       ...current,
@@ -548,7 +791,7 @@ function App() {
           amount: intakeForm.amount.trim() ? Number(intakeForm.amount) : null,
           targetCloseDate: optionalText(intakeForm.targetCloseDate),
         },
-        actions: intakeForm.actions.map((action) => ({
+        actions: intakeForm.templateId ? [] : intakeForm.actions.map((action) => ({
           title: action.title.trim(),
           section: action.section,
           priority: action.priority,
@@ -556,6 +799,7 @@ function App() {
           description: optionalText(action.description),
         })),
         initialNote: optionalText(intakeForm.initialNote),
+        templateId: optionalText(intakeForm.templateId),
       })
 
       await loadWorkspace(response.createdActionIds[0] ?? null)
@@ -596,7 +840,9 @@ function App() {
           <button className={view === 'reports' ? 'active' : ''} type="button" onClick={() => setView('reports')}>
             Reports
           </button>
-          <button disabled title="Coming soon" type="button">Admin</button>
+          <button className={view === 'admin' ? 'active' : ''} type="button" onClick={() => setView('admin')}>
+            Admin
+          </button>
         </nav>
         <div className="sidebar-summary">
           <span>Queue health</span>
@@ -611,9 +857,10 @@ function App() {
             <h1>
               {view === 'dashboard' && 'Processing dashboard'}
               {view === 'loans' && 'Loan pipeline'}
-              {view === 'customers' && 'Customers'}
-              {view === 'reports' && 'Reports'}
-              {view === 'intake' && 'New file intake'}
+            {view === 'customers' && 'Customers'}
+            {view === 'reports' && 'Reports'}
+            {view === 'admin' && 'Admin templates'}
+            {view === 'intake' && 'New file intake'}
             </h1>
           </div>
           <div className="topbar-actions">
@@ -664,6 +911,7 @@ function App() {
           <IntakePage
             disabled={isSubmittingIntake}
             form={intakeForm}
+            templates={templates.filter((template) => template.isActive)}
             onAddAction={addIntakeAction}
             onRemoveAction={removeIntakeAction}
             onSubmit={submitIntake}
@@ -733,11 +981,13 @@ function App() {
               disabled={isMutating}
               followUpAction={followUpAction}
               noteDraft={noteDraft}
+              templates={templates.filter((template) => template.isActive)}
               onAddNote={addNote}
               onComplete={completeSelectedAction}
               onCreateFollowUpAction={submitFollowUpAction}
               onDraftChange={setNoteDraft}
               onFollowUpActionChange={updateFollowUpAction}
+              onGenerateTemplateActions={generateTemplateActionsForSelectedLoan}
               onRescheduleDateChange={setRescheduleDate}
               onRescheduleReasonChange={setRescheduleReason}
               onReschedule={rescheduleSelectedAction}
@@ -815,6 +1065,21 @@ function App() {
             }}
             summary={reportSummary}
           />
+        ) : view === 'admin' ? (
+          <AdminTemplatesPage
+            disabled={isSavingTemplate}
+            filteredTemplates={filteredTemplates}
+            form={templateForm}
+            selectedTemplate={selectedTemplate}
+            templateDetail={templateDetail}
+            onAddItem={addTemplateItem}
+            onNewTemplate={startNewTemplate}
+            onRemoveItem={removeTemplateItem}
+            onSelectTemplate={setSelectedTemplateId}
+            onSubmit={submitTemplate}
+            onUpdateField={updateTemplateField}
+            onUpdateItem={updateTemplateItem}
+          />
         ) : (
           <section className="panel pipeline-panel">
             <div className="panel-header">
@@ -854,6 +1119,182 @@ function App() {
         )}
       </section>
     </main>
+  )
+}
+
+function AdminTemplatesPage({
+  disabled,
+  filteredTemplates,
+  form,
+  selectedTemplate,
+  templateDetail,
+  onAddItem,
+  onNewTemplate,
+  onRemoveItem,
+  onSelectTemplate,
+  onSubmit,
+  onUpdateField,
+  onUpdateItem,
+}: {
+  disabled: boolean
+  filteredTemplates: ActionTemplateListItem[]
+  form: TemplateFormState
+  selectedTemplate: ActionTemplateListItem | null
+  templateDetail: ActionTemplateDetail | null
+  onAddItem: () => void
+  onNewTemplate: () => void
+  onRemoveItem: (index: number) => void
+  onSelectTemplate: (id: string | null) => void
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  onUpdateField: (field: keyof Omit<TemplateFormState, 'items'>, value: string | boolean | null) => void
+  onUpdateItem: (index: number, field: keyof TemplateItemForm, value: string) => void
+}) {
+  return (
+    <section className="content-grid admin-grid">
+      <div className="panel template-list-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Action templates</h2>
+            <p>{filteredTemplates.length} visible</p>
+          </div>
+          <button className="secondary" type="button" onClick={onNewTemplate}>New template</button>
+        </div>
+        <div className="template-list">
+          {filteredTemplates.map((template) => (
+            <button
+              className={`template-row ${selectedTemplate?.id === template.id ? 'selected' : ''}`}
+              key={template.id}
+              type="button"
+              onClick={() => onSelectTemplate(template.id)}
+            >
+              <span>
+                <strong>{template.name}</strong>
+                <small>{template.loanType} - {template.stage}</small>
+              </span>
+              <span>
+                <strong>{template.itemCount}</strong>
+                <small>{template.isActive ? 'Active' : 'Inactive'}</small>
+              </span>
+            </button>
+          ))}
+          {filteredTemplates.length === 0 && <p className="state-message">No templates match this search.</p>}
+        </div>
+      </div>
+
+      <form className="panel template-editor-panel" onSubmit={onSubmit}>
+        <div className="panel-header">
+          <div>
+            <h2>{form.id ? 'Edit template' : 'New template'}</h2>
+            <p>{templateDetail ? `${templateDetail.items.length} saved items` : 'Draft'}</p>
+          </div>
+          <button disabled={disabled} type="submit">{disabled ? 'Saving...' : 'Save template'}</button>
+        </div>
+
+        <div className="form-grid two-column">
+          <label>
+            Name
+            <input
+              disabled={disabled}
+              onChange={(event) => onUpdateField('name', event.target.value)}
+              required
+              value={form.name}
+            />
+          </label>
+          <label>
+            Loan type
+            <select disabled={disabled} onChange={(event) => onUpdateField('loanType', event.target.value)} value={form.loanType}>
+              {loanTypes.map((loanType) => <option key={loanType}>{loanType}</option>)}
+            </select>
+          </label>
+          <label>
+            Stage
+            <select disabled={disabled} onChange={(event) => onUpdateField('stage', event.target.value)} value={form.stage}>
+              {loanStages.map((stage) => <option key={stage}>{stage}</option>)}
+            </select>
+          </label>
+          <label className="check-label">
+            <input
+              checked={form.isActive}
+              disabled={disabled}
+              onChange={(event) => onUpdateField('isActive', event.target.checked)}
+              type="checkbox"
+            />
+            Active
+          </label>
+        </div>
+
+        <div className="template-items-header">
+          <h3>Template items</h3>
+          <button className="secondary" disabled={disabled || form.items.length >= 20} type="button" onClick={onAddItem}>
+            Add item
+          </button>
+        </div>
+
+        <div className="template-item-list">
+          {form.items.map((item, index) => (
+            <div className="template-item-card" key={index}>
+              <div className="template-item-title">
+                <strong>Item {index + 1}</strong>
+                <button className="ghost" disabled={disabled || form.items.length === 1} type="button" onClick={() => onRemoveItem(index)}>
+                  Remove
+                </button>
+              </div>
+              <div className="form-grid action-grid">
+                <label>
+                  Title
+                  <input
+                    disabled={disabled}
+                    onChange={(event) => onUpdateItem(index, 'title', event.target.value)}
+                    required
+                    value={item.title}
+                  />
+                </label>
+                <label>
+                  Section
+                  <select disabled={disabled} onChange={(event) => onUpdateItem(index, 'section', event.target.value)} value={item.section}>
+                    {actionSections.map((section) => <option key={section}>{section}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Priority
+                  <select disabled={disabled} onChange={(event) => onUpdateItem(index, 'priority', event.target.value)} value={item.priority}>
+                    {actionPriorities.map((priority) => <option key={priority}>{priority}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Due offset
+                  <input
+                    disabled={disabled}
+                    onChange={(event) => onUpdateItem(index, 'dueOffsetDays', event.target.value)}
+                    type="number"
+                    value={item.dueOffsetDays}
+                  />
+                </label>
+                <label>
+                  Sort
+                  <input
+                    disabled={disabled}
+                    min="1"
+                    onChange={(event) => onUpdateItem(index, 'sortOrder', event.target.value)}
+                    type="number"
+                    value={item.sortOrder}
+                  />
+                </label>
+                <label className="span-all">
+                  Description
+                  <textarea
+                    disabled={disabled}
+                    onChange={(event) => onUpdateItem(index, 'description', event.target.value)}
+                    rows={3}
+                    value={item.description}
+                  />
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+      </form>
+    </section>
   )
 }
 
@@ -1052,6 +1493,7 @@ function CustomerContextPanel({
 function IntakePage({
   disabled,
   form,
+  templates,
   onAddAction,
   onRemoveAction,
   onSubmit,
@@ -1060,6 +1502,7 @@ function IntakePage({
 }: {
   disabled: boolean
   form: IntakeFormState
+  templates: ActionTemplateListItem[]
   onAddAction: () => void
   onRemoveAction: (index: number) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
@@ -1169,10 +1612,32 @@ function IntakePage({
       <section className="panel intake-section">
         <div className="panel-header">
           <div>
-            <h2>Initial actions</h2>
-            <p>{form.actions.length} of 3</p>
+            <h2>Workflow template</h2>
+            <p>{form.templateId ? 'Initial actions will be generated' : 'Manual initial actions'}</p>
           </div>
-          <button className="secondary" disabled={disabled || form.actions.length >= 3} type="button" onClick={onAddAction}>
+        </div>
+        <div className="form-grid two-column">
+          <label>
+            Template
+            <select disabled={disabled} onChange={(event) => onUpdateField('templateId', event.target.value)} value={form.templateId}>
+              <option value="">Manual actions</option>
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name} - {template.loanType} - {template.itemCount} items
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section className="panel intake-section">
+        <div className="panel-header">
+          <div>
+            <h2>Initial actions</h2>
+            <p>{form.templateId ? 'Generated by template' : `${form.actions.length} of 3`}</p>
+          </div>
+          <button className="secondary" disabled={disabled || Boolean(form.templateId) || form.actions.length >= 3} type="button" onClick={onAddAction}>
             Add action
           </button>
         </div>
@@ -1183,7 +1648,7 @@ function IntakePage({
                 <strong>Action {index + 1}</strong>
                 <button
                   className="ghost"
-                  disabled={disabled || form.actions.length === 1}
+                  disabled={disabled || Boolean(form.templateId) || form.actions.length === 1}
                   type="button"
                   onClick={() => onRemoveAction(index)}
                 >
@@ -1194,30 +1659,30 @@ function IntakePage({
                 <label>
                   Title
                   <input
-                    disabled={disabled}
+                    disabled={disabled || Boolean(form.templateId)}
                     onChange={(event) => onUpdateAction(index, 'title', event.target.value)}
-                    required
+                    required={!form.templateId}
                     value={action.title}
                   />
                 </label>
                 <label>
                   Section
-                  <select disabled={disabled} onChange={(event) => onUpdateAction(index, 'section', event.target.value)} value={action.section}>
+                  <select disabled={disabled || Boolean(form.templateId)} onChange={(event) => onUpdateAction(index, 'section', event.target.value)} value={action.section}>
                     {actionSections.map((section) => <option key={section}>{section}</option>)}
                   </select>
                 </label>
                 <label>
                   Priority
-                  <select disabled={disabled} onChange={(event) => onUpdateAction(index, 'priority', event.target.value)} value={action.priority}>
+                  <select disabled={disabled || Boolean(form.templateId)} onChange={(event) => onUpdateAction(index, 'priority', event.target.value)} value={action.priority}>
                     {actionPriorities.map((priority) => <option key={priority}>{priority}</option>)}
                   </select>
                 </label>
                 <label>
                   Due date
                   <input
-                    disabled={disabled}
+                    disabled={disabled || Boolean(form.templateId)}
                     onChange={(event) => onUpdateAction(index, 'dueDate', event.target.value)}
-                    required
+                    required={!form.templateId}
                     type="date"
                     value={action.dueDate}
                   />
@@ -1225,7 +1690,7 @@ function IntakePage({
                 <label className="span-all">
                   Description
                   <textarea
-                    disabled={disabled}
+                    disabled={disabled || Boolean(form.templateId)}
                     onChange={(event) => onUpdateAction(index, 'description', event.target.value)}
                     rows={3}
                     value={action.description}
@@ -1268,11 +1733,13 @@ function LoanContextPanel({
   disabled,
   followUpAction,
   noteDraft,
+  templates,
   onAddNote,
   onComplete,
   onCreateFollowUpAction,
   onDraftChange,
   onFollowUpActionChange,
+  onGenerateTemplateActions,
   onRescheduleDateChange,
   onRescheduleReasonChange,
   onReschedule,
@@ -1284,17 +1751,21 @@ function LoanContextPanel({
   disabled: boolean
   followUpAction: FollowUpActionForm
   noteDraft: string
+  templates: ActionTemplateListItem[]
   onAddNote: () => void
   onComplete: () => void
   onCreateFollowUpAction: () => void
   onDraftChange: (value: string) => void
   onFollowUpActionChange: (field: keyof FollowUpActionForm, value: string) => void
+  onGenerateTemplateActions: (templateId: string) => void
   onRescheduleDateChange: (value: string) => void
   onRescheduleReasonChange: (value: string) => void
   onReschedule: () => void
   rescheduleDate: string
   rescheduleReason: string
 }) {
+  const selectedGenerationTemplateId = templates[0]?.id ?? ''
+
   if (!action) {
     return (
       <aside className="panel detail-panel">
@@ -1391,6 +1862,35 @@ function LoanContextPanel({
           onClick={onCreateFollowUpAction}
         >
           Add follow-up
+        </button>
+      </div>
+
+      <div className="follow-up-box template-generate-box">
+        <div>
+          <h3>Generate from template</h3>
+          <p>Create missing standardized actions for this loan.</p>
+        </div>
+        <select
+          aria-label="Action template"
+          disabled={disabled || templates.length === 0}
+          defaultValue={selectedGenerationTemplateId}
+        >
+          {templates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name} - {template.itemCount} items
+            </option>
+          ))}
+        </select>
+        <button
+          className="secondary"
+          disabled={disabled || templates.length === 0}
+          type="button"
+          onClick={(event) => {
+            const select = event.currentTarget.parentElement?.querySelector('select') as HTMLSelectElement | null
+            onGenerateTemplateActions(select?.value ?? selectedGenerationTemplateId)
+          }}
+        >
+          Generate actions
         </button>
       </div>
 

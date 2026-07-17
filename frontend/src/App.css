@@ -825,6 +825,93 @@ select {
   justify-content: flex-end;
 }
 
+.admin-grid {
+  align-items: start;
+}
+
+.template-list,
+.template-item-list {
+  display: grid;
+  gap: 10px;
+}
+
+.template-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px;
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #dce5e9;
+  background: #ffffff;
+  color: #17242c;
+  text-align: left;
+}
+
+.template-row:hover,
+.template-row.selected {
+  border-color: #5f8fa3;
+  background: #eef6f8;
+}
+
+.template-row span,
+.template-item-title {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.template-row strong,
+.template-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-row small {
+  color: #687782;
+  font-size: 12px;
+}
+
+.template-editor-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.check-label {
+  align-content: center;
+  display: flex !important;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.check-label input {
+  width: auto;
+}
+
+.template-items-header,
+.template-item-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.template-items-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.template-item-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #dce5e9;
+  border-radius: 8px;
+  background: #f8fafb;
+}
+
 @media (max-width: 1080px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -872,6 +959,7 @@ select {
   .panel-header,
   .action-row,
   .customer-row,
+  .template-row,
   .two-column,
   .three-column,
   .action-grid {

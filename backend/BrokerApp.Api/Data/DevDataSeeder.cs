@@ -5,6 +5,22 @@ namespace BrokerApp.Api.Data;
 
 public static class DevDataSeeder
 {
+    private static readonly DemoTemplate[] DemoTemplates =
+    [
+        new("60000000-0000-0000-0000-000000000001", "Purchase Processing", "Purchase", "New file", true,
+        [
+            new("61000000-0000-0000-0000-000000000001", 1, ActionSections.Borrower, "Collect initial borrower disclosures", ActionPriorities.High, 1, "Confirm the borrower has signed the initial package."),
+            new("61000000-0000-0000-0000-000000000002", 2, ActionSections.Title, "Confirm title contact and needs list", ActionPriorities.Normal, 2, "Capture the title contact and any open title requirements."),
+            new("61000000-0000-0000-0000-000000000003", 3, ActionSections.Realtor, "Send realtor introduction and timeline", ActionPriorities.Normal, 3, "Make sure the realtor has the close timeline and contact path.")
+        ]),
+        new("60000000-0000-0000-0000-000000000002", "Refinance Processing", "Refinance", "New file", true,
+        [
+            new("62000000-0000-0000-0000-000000000001", 1, ActionSections.Borrower, "Collect updated mortgage statement", ActionPriorities.High, 1, "Needed to confirm payoff and current payment status."),
+            new("62000000-0000-0000-0000-000000000002", 2, ActionSections.Borrower, "Confirm homeowner insurance details", ActionPriorities.Normal, 2, "Verify current carrier and renewal timing."),
+            new("62000000-0000-0000-0000-000000000003", 3, ActionSections.Title, "Order payoff and title review", ActionPriorities.Normal, 4, "Start the payoff and title review path.")
+        ])
+    ];
+
     private static readonly DemoLoan[] DemoLoans =
     [
         new("30000000-0000-0000-0000-000000000001", "40000000-0000-0000-0000-000000000001", "Lloyd", "Daw", "lando@gmail.com", "LN-1001", "Processing", 12,
@@ -72,6 +88,47 @@ public static class DevDataSeeder
                 Role = UserRoles.LoanOfficer,
                 CreatedAtUtc = now
             });
+        }
+
+        foreach (var demoTemplate in DemoTemplates)
+        {
+            var templateId = Guid.Parse(demoTemplate.Id);
+
+            if (!await dbContext.ActionTemplates.AnyAsync(template => template.Id == templateId))
+            {
+                dbContext.ActionTemplates.Add(new ActionTemplate
+                {
+                    Id = templateId,
+                    OrganizationId = DevDataIds.OrganizationId,
+                    Name = demoTemplate.Name,
+                    LoanType = demoTemplate.LoanType,
+                    Stage = demoTemplate.Stage,
+                    IsActive = demoTemplate.IsActive,
+                    CreatedAtUtc = now,
+                    UpdatedAtUtc = now
+                });
+            }
+
+            foreach (var demoItem in demoTemplate.Items)
+            {
+                var itemId = Guid.Parse(demoItem.Id);
+
+                if (!await dbContext.ActionTemplateItems.AnyAsync(item => item.Id == itemId))
+                {
+                    dbContext.ActionTemplateItems.Add(new ActionTemplateItem
+                    {
+                        Id = itemId,
+                        OrganizationId = DevDataIds.OrganizationId,
+                        ActionTemplateId = templateId,
+                        SortOrder = demoItem.SortOrder,
+                        Section = demoItem.Section,
+                        Title = demoItem.Title,
+                        Description = demoItem.Description,
+                        Priority = demoItem.Priority,
+                        DueOffsetDays = demoItem.DueOffsetDays
+                    });
+                }
+            }
         }
 
         foreach (var demoLoan in DemoLoans)
@@ -181,6 +238,23 @@ public static class DevDataSeeder
         string Stage,
         int CloseInDays,
         DemoAction[] Actions);
+
+    private sealed record DemoTemplate(
+        string Id,
+        string Name,
+        string LoanType,
+        string Stage,
+        bool IsActive,
+        DemoTemplateItem[] Items);
+
+    private sealed record DemoTemplateItem(
+        string Id,
+        int SortOrder,
+        string Section,
+        string Title,
+        string Priority,
+        int DueOffsetDays,
+        string? Description);
 
     private sealed record DemoAction(
         string Id,

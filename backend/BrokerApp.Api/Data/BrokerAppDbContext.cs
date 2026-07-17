@@ -27,6 +27,8 @@ public sealed class BrokerAppDbContext : DbContext
     public DbSet<LoanAction> LoanActions => Set<LoanAction>();
     public DbSet<ActionEvent> ActionEvents => Set<ActionEvent>();
     public DbSet<LoanNote> LoanNotes => Set<LoanNote>();
+    public DbSet<ActionTemplate> ActionTemplates => Set<ActionTemplate>();
+    public DbSet<ActionTemplateItem> ActionTemplateItems => Set<ActionTemplateItem>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -141,10 +143,48 @@ public sealed class BrokerAppDbContext : DbContext
                 .WithMany(e => e.Actions)
                 .HasForeignKey(e => e.LoanId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.ActionTemplateItem)
+                .WithMany(e => e.GeneratedActions)
+                .HasForeignKey(e => e.ActionTemplateItemId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.AssignedUser)
                 .WithMany(e => e.AssignedActions)
                 .HasForeignKey(e => e.AssignedUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ActionTemplate>(entity =>
+        {
+            entity.Property(e => e.Name).HasMaxLength(160).IsRequired();
+            entity.Property(e => e.LoanType).HasMaxLength(80).IsRequired();
+            entity.Property(e => e.Stage).HasMaxLength(80).IsRequired();
+            if (_usesInMemoryProvider)
+            {
+                entity.Ignore(e => e.RowVersion);
+            }
+            else
+            {
+                entity.Property(e => e.RowVersion).IsRowVersion();
+            }
+            entity.HasIndex(e => new { e.OrganizationId, e.Name }).IsUnique();
+            entity.HasIndex(e => new { e.OrganizationId, e.IsActive, e.LoanType, e.Stage });
+            entity.HasOne(e => e.Organization)
+                .WithMany(e => e.ActionTemplates)
+                .HasForeignKey(e => e.OrganizationId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ActionTemplateItem>(entity =>
+        {
+            entity.Property(e => e.Section).HasMaxLength(40).IsRequired();
+            entity.Property(e => e.Title).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.Priority).HasMaxLength(40).IsRequired();
+            entity.HasIndex(e => new { e.OrganizationId, e.ActionTemplateId, e.SortOrder });
+            entity.HasOne(e => e.ActionTemplate)
+                .WithMany(e => e.Items)
+                .HasForeignKey(e => e.ActionTemplateId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ActionEvent>(entity =>
