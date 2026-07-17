@@ -43,3 +43,19 @@ public sealed record ActionEventDto(
     string? OldValue,
     string? NewValue,
     DateTimeOffset OccurredAtUtc);
+
+public sealed record CreateLoanActionRequest(
+    string Title,
+    string Section,
+    string Priority,
+    DateOnly DueDate,
+    string? Description);
+
+public sealed record CreateLoanActionResponse(
+    string Id,
+    string LoanNumber,
+    string BorrowerName,
+    string Title,
+    string Section,
+    string Priority,
+    DateOnly DueDate);

@@ -4,20 +4,27 @@ import {
   addActionComment,
   completeAction,
   createFileIntake,
+  createLoanAction,
+  getCustomer,
+  getCustomers,
   getDashboard,
   getLoan,
   getLoans,
+  getReportSummary,
   rescheduleAction,
 } from './api'
 import type {
   DashboardAction,
   DashboardSummary,
+  CustomerDetail,
+  CustomerListItem,
   LoanDetail,
   LoanListItem,
+  ReportSummary,
 } from './api'
 import './App.css'
 
-type WorkspaceView = 'dashboard' | 'loans' | 'intake'
+type WorkspaceView = 'dashboard' | 'loans' | 'customers' | 'reports' | 'intake'
 type QueueFilter = 'all' | 'overdue' | 'today' | 'high'
 
 type IntakeActionForm = {
@@ -42,11 +49,28 @@ type IntakeFormState = {
   initialNote: string
 }
 
+type FollowUpActionForm = {
+  title: string
+  section: string
+  priority: string
+  dueDate: string
+  description: string
+}
+
 const emptyDashboard: DashboardSummary = {
   overdueCount: 0,
   dueTodayCount: 0,
   upcomingCount: 0,
   openActions: [],
+}
+
+const emptyReportSummary: ReportSummary = {
+  metrics: [],
+  pipelineByStage: [],
+  openActionsBySection: [],
+  openActionsByPriority: [],
+  upcomingClosings: [],
+  oldestOpenActions: [],
 }
 
 const sectionCopy: Record<string, string> = {
@@ -104,6 +128,16 @@ function emptyIntakeAction(): IntakeActionForm {
   }
 }
 
+function emptyFollowUpAction(): FollowUpActionForm {
+  return {
+    title: '',
+    section: 'Borrower',
+    priority: 'Normal',
+    dueDate: addDays(new Date().toISOString().slice(0, 10), 2),
+    description: '',
+  }
+}
+
 function emptyIntakeForm(): IntakeFormState {
   return {
     firstName: '',
@@ -129,15 +163,20 @@ function optionalText(value: string) {
 function App() {
   const [dashboard, setDashboard] = useState<DashboardSummary>(emptyDashboard)
   const [loans, setLoans] = useState<LoanListItem[]>([])
+  const [customers, setCustomers] = useState<CustomerListItem[]>([])
+  const [reportSummary, setReportSummary] = useState<ReportSummary>(emptyReportSummary)
   const [loanDetail, setLoanDetail] = useState<LoanDetail | null>(null)
+  const [customerDetail, setCustomerDetail] = useState<CustomerDetail | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null)
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
   const [view, setView] = useState<WorkspaceView>('dashboard')
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('all')
   const [noteDraft, setNoteDraft] = useState('')
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [rescheduleReason, setRescheduleReason] = useState('')
   const [intakeForm, setIntakeForm] = useState<IntakeFormState>(() => emptyIntakeForm())
+  const [followUpAction, setFollowUpAction] = useState<FollowUpActionForm>(() => emptyFollowUpAction())
   const [isLoading, setIsLoading] = useState(true)
   const [isMutating, setIsMutating] = useState(false)
   const [isSubmittingIntake, setIsSubmittingIntake] = useState(false)
@@ -145,12 +184,16 @@ function App() {
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
 
   async function loadWorkspace(preferredActionId?: string | null) {
-    const [dashboardSummary, loanRows] = await Promise.all([
+    const [dashboardSummary, loanRows, customerRows, reportRows] = await Promise.all([
       getDashboard(),
       getLoans(),
+      getCustomers(),
+      getReportSummary(),
     ])
     setDashboard(dashboardSummary)
     setLoans(loanRows)
+    setCustomers(customerRows)
+    setReportSummary(reportRows)
 
     const nextSelectedActionId = preferredActionId
       && dashboardSummary.openActions.some((action) => action.id === preferredActionId)
@@ -158,6 +201,9 @@ function App() {
       : dashboardSummary.openActions[0]?.id ?? null
 
     setSelectedActionId(nextSelectedActionId)
+    setSelectedCustomerId((current) => current && customerRows.some((customer) => customer.id === current)
+      ? current
+      : customerRows[0]?.id ?? null)
     return { dashboardSummary, nextSelectedActionId }
   }
 
@@ -241,11 +287,35 @@ function App() {
     )
   }, [loans, searchTerm])
 
+  const filteredCustomers = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase()
+
+    if (!query) {
+      return customers
+    }
+
+    return customers.filter((customer) =>
+      [
+        customer.borrowerName,
+        customer.email ?? '',
+        customer.phone ?? '',
+        customer.status,
+        customer.nextActionTitle ?? '',
+      ].some((value) => value.toLowerCase().includes(query)),
+    )
+  }, [customers, searchTerm])
+
   const selectedAction = useMemo(() => (
     filteredActions.find((action) => action.id === selectedActionId)
     ?? filteredActions[0]
     ?? null
   ), [filteredActions, selectedActionId])
+
+  const selectedCustomer = useMemo(() => (
+    filteredCustomers.find((customer) => customer.id === selectedCustomerId)
+    ?? filteredCustomers[0]
+    ?? null
+  ), [filteredCustomers, selectedCustomerId])
 
   useEffect(() => {
     let isMounted = true
@@ -277,6 +347,35 @@ function App() {
   }, [selectedAction])
 
   useEffect(() => {
+    let isMounted = true
+
+    async function loadCustomerDetail() {
+      if (view !== 'customers' || !selectedCustomer) {
+        setCustomerDetail(null)
+        return
+      }
+
+      try {
+        const detail = await getCustomer(selectedCustomer.id)
+
+        if (isMounted) {
+          setCustomerDetail(detail)
+        }
+      } catch (caughtError) {
+        if (isMounted) {
+          setError(caughtError instanceof Error ? caughtError.message : 'Customer detail request failed')
+        }
+      }
+    }
+
+    void loadCustomerDetail()
+
+    return () => {
+      isMounted = false
+    }
+  }, [selectedCustomer, view])
+
+  useEffect(() => {
     if (!selectedAction) {
       setRescheduleDate('')
       setRescheduleReason('')
@@ -285,6 +384,7 @@ function App() {
 
     setRescheduleDate(addDays(selectedAction.dueDate, 3))
     setRescheduleReason('')
+    setFollowUpAction(emptyFollowUpAction())
   }, [selectedAction])
 
   async function runWorkflow(
@@ -351,6 +451,46 @@ function App() {
       'Note added to loan file.',
       selectedAction.id,
     )
+  }
+
+  function updateFollowUpAction(field: keyof FollowUpActionForm, value: string) {
+    setFollowUpAction((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
+  function submitFollowUpAction() {
+    if (!selectedAction || !followUpAction.title.trim() || !followUpAction.dueDate) {
+      return
+    }
+
+    const loanNumber = selectedAction.loanNumber
+
+    void (async () => {
+      setIsMutating(true)
+      setWorkflowMessage(null)
+      setError(null)
+
+      try {
+        const response = await createLoanAction(loanNumber, {
+          title: followUpAction.title.trim(),
+          section: followUpAction.section,
+          priority: followUpAction.priority,
+          dueDate: followUpAction.dueDate,
+          description: optionalText(followUpAction.description),
+        })
+        await loadWorkspace(response.id)
+        setLoanDetail(await getLoan(response.loanNumber))
+        setSelectedActionId(response.id)
+        setFollowUpAction(emptyFollowUpAction())
+        setWorkflowMessage(`Follow-up action ${response.id} added to ${loanNumber}.`)
+      } catch (caughtError) {
+        setError(caughtError instanceof Error ? caughtError.message : 'Follow-up action request failed')
+      } finally {
+        setIsMutating(false)
+      }
+    })()
   }
 
   function updateIntakeField(field: keyof Omit<IntakeFormState, 'actions'>, value: string) {
@@ -450,8 +590,12 @@ function App() {
           <button className={view === 'loans' ? 'active' : ''} type="button" onClick={() => setView('loans')}>
             Loans
           </button>
-          <button disabled title="Coming soon" type="button">Customers</button>
-          <button disabled title="Coming soon" type="button">Reports</button>
+          <button className={view === 'customers' ? 'active' : ''} type="button" onClick={() => setView('customers')}>
+            Customers
+          </button>
+          <button className={view === 'reports' ? 'active' : ''} type="button" onClick={() => setView('reports')}>
+            Reports
+          </button>
           <button disabled title="Coming soon" type="button">Admin</button>
         </nav>
         <div className="sidebar-summary">
@@ -467,6 +611,8 @@ function App() {
             <h1>
               {view === 'dashboard' && 'Processing dashboard'}
               {view === 'loans' && 'Loan pipeline'}
+              {view === 'customers' && 'Customers'}
+              {view === 'reports' && 'Reports'}
               {view === 'intake' && 'New file intake'}
             </h1>
           </div>
@@ -585,10 +731,13 @@ function App() {
               action={selectedAction}
               detail={loanDetail}
               disabled={isMutating}
+              followUpAction={followUpAction}
               noteDraft={noteDraft}
               onAddNote={addNote}
               onComplete={completeSelectedAction}
+              onCreateFollowUpAction={submitFollowUpAction}
               onDraftChange={setNoteDraft}
+              onFollowUpActionChange={updateFollowUpAction}
               onRescheduleDateChange={setRescheduleDate}
               onRescheduleReasonChange={setRescheduleReason}
               onReschedule={rescheduleSelectedAction}
@@ -596,6 +745,76 @@ function App() {
               rescheduleReason={rescheduleReason}
             />
           </section>
+        ) : view === 'customers' ? (
+          <section className="content-grid">
+            <div className="panel customer-panel">
+              <div className="panel-header">
+                <div>
+                  <h2>Borrower directory</h2>
+                  <p>{filteredCustomers.length} visible</p>
+                </div>
+              </div>
+              {isLoading && <p className="state-message">Loading customers...</p>}
+              {error && <p className="state-message error">{error}</p>}
+              {!isLoading && !error && filteredCustomers.length === 0 && (
+                <p className="state-message">No customers match this search.</p>
+              )}
+              {!isLoading && !error && filteredCustomers.length > 0 && (
+                <div className="customer-list">
+                  {filteredCustomers.map((customer) => (
+                    <button
+                      className={`customer-row ${selectedCustomer?.id === customer.id ? 'selected' : ''}`}
+                      key={customer.id}
+                      onClick={() => setSelectedCustomerId(customer.id)}
+                      type="button"
+                    >
+                      <span className="customer-main">
+                        <strong>{customer.borrowerName}</strong>
+                        <small>{customer.email ?? 'No email'} - {customer.phone ?? 'No phone'}</small>
+                      </span>
+                      <span className="customer-stat">
+                        <strong>{customer.loanCount}</strong>
+                        <small>Loans</small>
+                      </span>
+                      <span className="customer-stat">
+                        <strong>{customer.openActionCount}</strong>
+                        <small>Open</small>
+                      </span>
+                      <span className="customer-next">
+                        <strong>{customer.nextActionTitle ?? 'No open action'}</strong>
+                        <small>{formatDueDate(customer.nextActionDueDate)}</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <CustomerContextPanel
+              detail={customerDetail}
+              onOpenAction={(actionId) => {
+                setView('dashboard')
+                setSelectedActionId(actionId)
+              }}
+              onOpenLoan={(loanNumber) => {
+                setView('dashboard')
+                setSelectedActionId(dashboard.openActions.find((action) => action.loanNumber === loanNumber)?.id ?? null)
+              }}
+              selected={selectedCustomer}
+            />
+          </section>
+        ) : view === 'reports' ? (
+          <ReportsPage
+            onOpenAction={(actionId) => {
+              setView('dashboard')
+              setSelectedActionId(actionId)
+            }}
+            onOpenLoan={(loanNumber) => {
+              setView('dashboard')
+              setSelectedActionId(dashboard.openActions.find((action) => action.loanNumber === loanNumber)?.id ?? null)
+            }}
+            summary={reportSummary}
+          />
         ) : (
           <section className="panel pipeline-panel">
             <div className="panel-header">
@@ -635,6 +854,198 @@ function App() {
         )}
       </section>
     </main>
+  )
+}
+
+function ReportsPage({
+  onOpenAction,
+  onOpenLoan,
+  summary,
+}: {
+  onOpenAction: (actionId: string) => void
+  onOpenLoan: (loanNumber: string) => void
+  summary: ReportSummary
+}) {
+  return (
+    <section className="reports-page">
+      <div className="report-metrics" aria-label="Report metrics">
+        {summary.metrics.map((metric) => (
+          <article className="report-metric" key={metric.label}>
+            <span>{metric.label}</span>
+            <strong>{metric.value}</strong>
+          </article>
+        ))}
+      </div>
+
+      <div className="report-grid">
+        <BreakdownPanel title="Pipeline by stage" items={summary.pipelineByStage} />
+        <BreakdownPanel title="Open actions by section" items={summary.openActionsBySection} />
+        <BreakdownPanel title="Open actions by priority" items={summary.openActionsByPriority} />
+      </div>
+
+      <div className="report-grid two-panel">
+        <section className="panel report-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Upcoming closings</h2>
+              <p>{summary.upcomingClosings.length} files</p>
+            </div>
+          </div>
+          <div className="report-list">
+            {summary.upcomingClosings.map((loan) => (
+              <button className="report-row" key={loan.loanNumber} type="button" onClick={() => onOpenLoan(loan.loanNumber)}>
+                <span>
+                  <strong>{loan.borrowerName}</strong>
+                  <small>{loan.loanNumber} - {loan.stage}</small>
+                </span>
+                <span>
+                  <strong>{formatDueDate(loan.targetCloseDate)}</strong>
+                  <small>{loan.openActionCount} open</small>
+                </span>
+              </button>
+            ))}
+            {summary.upcomingClosings.length === 0 && <p className="state-message">No upcoming closings.</p>}
+          </div>
+        </section>
+
+        <section className="panel report-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Oldest open actions</h2>
+              <p>{summary.oldestOpenActions.length} actions</p>
+            </div>
+          </div>
+          <div className="report-list">
+            {summary.oldestOpenActions.map((action) => (
+              <button className="report-row" key={action.id} type="button" onClick={() => onOpenAction(action.id)}>
+                <span>
+                  <strong>{action.title}</strong>
+                  <small>{action.borrowerName} - {action.loanNumber}</small>
+                </span>
+                <span>
+                  <strong>{formatDueDate(action.dueDate)}</strong>
+                  <small>{action.daysOpen} days open</small>
+                </span>
+              </button>
+            ))}
+            {summary.oldestOpenActions.length === 0 && <p className="state-message">No open actions.</p>}
+          </div>
+        </section>
+      </div>
+    </section>
+  )
+}
+
+function BreakdownPanel({
+  items,
+  title,
+}: {
+  items: Array<{ label: string; value: number }>
+  title: string
+}) {
+  const maxValue = Math.max(...items.map((item) => item.value), 1)
+
+  return (
+    <section className="panel report-panel">
+      <div className="panel-header">
+        <div>
+          <h2>{title}</h2>
+          <p>{items.reduce((total, item) => total + item.value, 0)} total</p>
+        </div>
+      </div>
+      <div className="breakdown-list">
+        {items.map((item) => (
+          <div className="breakdown-row" key={item.label}>
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+            <div aria-hidden="true">
+              <i style={{ width: `${Math.max(8, (item.value / maxValue) * 100)}%` }} />
+            </div>
+          </div>
+        ))}
+        {items.length === 0 && <p className="state-message">No data yet.</p>}
+      </div>
+    </section>
+  )
+}
+
+function CustomerContextPanel({
+  detail,
+  onOpenAction,
+  onOpenLoan,
+  selected,
+}: {
+  detail: CustomerDetail | null
+  onOpenAction: (actionId: string) => void
+  onOpenLoan: (loanNumber: string) => void
+  selected: CustomerListItem | null
+}) {
+  if (!selected) {
+    return (
+      <aside className="panel detail-panel">
+        <h2>Customer context</h2>
+        <p className="state-message">Select a customer to review borrower activity.</p>
+      </aside>
+    )
+  }
+
+  return (
+    <aside className="panel detail-panel customer-detail-panel">
+      <div className="detail-header">
+        <span className="status upcoming">{selected.status}</span>
+        <h2>{selected.borrowerName}</h2>
+        <p>{selected.email ?? 'No email'} - {selected.phone ?? 'No phone'}</p>
+      </div>
+
+      <dl>
+        <div>
+          <dt>Loans</dt>
+          <dd>{detail?.loans.length ?? selected.loanCount}</dd>
+        </div>
+        <div>
+          <dt>Open actions</dt>
+          <dd>{detail?.openActions.length ?? selected.openActionCount}</dd>
+        </div>
+        <div>
+          <dt>Next action</dt>
+          <dd>{selected.nextActionTitle ?? 'None'}</dd>
+        </div>
+      </dl>
+
+      <div className="activity-feed">
+        <h3>Loans</h3>
+        {(detail?.loans.length ? detail.loans : []).map((loan) => (
+          <button className="context-row" key={loan.loanNumber} type="button" onClick={() => onOpenLoan(loan.loanNumber)}>
+            <span>
+              <strong>{loan.loanNumber}</strong>
+              <small>{loan.type} - {loan.stage}</small>
+            </span>
+            <span>
+              <strong>{loan.openActionCount}</strong>
+              <small>Open</small>
+            </span>
+          </button>
+        ))}
+        {detail && detail.loans.length === 0 && <p>No loans yet.</p>}
+      </div>
+
+      <div className="activity-feed">
+        <h3>Open actions</h3>
+        {(detail?.openActions.length ? detail.openActions : []).slice(0, 6).map((action) => (
+          <button className="context-row" key={action.id} type="button" onClick={() => onOpenAction(action.id)}>
+            <span>
+              <strong>{action.title}</strong>
+              <small>{action.loanNumber} - {sectionCopy[action.section] ?? action.section}</small>
+            </span>
+            <span>
+              <strong>{formatDueDate(action.dueDate)}</strong>
+              <small>{action.priority}</small>
+            </span>
+          </button>
+        ))}
+        {detail && detail.openActions.length === 0 && <p>No open actions.</p>}
+      </div>
+    </aside>
   )
 }
 
@@ -855,10 +1266,13 @@ function LoanContextPanel({
   action,
   detail,
   disabled,
+  followUpAction,
   noteDraft,
   onAddNote,
   onComplete,
+  onCreateFollowUpAction,
   onDraftChange,
+  onFollowUpActionChange,
   onRescheduleDateChange,
   onRescheduleReasonChange,
   onReschedule,
@@ -868,10 +1282,13 @@ function LoanContextPanel({
   action: DashboardAction | null
   detail: LoanDetail | null
   disabled: boolean
+  followUpAction: FollowUpActionForm
   noteDraft: string
   onAddNote: () => void
   onComplete: () => void
+  onCreateFollowUpAction: () => void
   onDraftChange: (value: string) => void
+  onFollowUpActionChange: (field: keyof FollowUpActionForm, value: string) => void
   onRescheduleDateChange: (value: string) => void
   onRescheduleReasonChange: (value: string) => void
   onReschedule: () => void
@@ -920,6 +1337,61 @@ function LoanContextPanel({
 
       <div className="workflow-actions">
         <button disabled={disabled} type="button" onClick={onComplete}>Complete</button>
+      </div>
+
+      <div className="follow-up-box">
+        <div>
+          <h3>New follow-up</h3>
+          <p>Add another condition or partner touch to this loan.</p>
+        </div>
+        <input
+          aria-label="Follow-up title"
+          disabled={disabled}
+          onChange={(event) => onFollowUpActionChange('title', event.target.value)}
+          placeholder="Action title"
+          value={followUpAction.title}
+        />
+        <div className="follow-up-grid">
+          <select
+            aria-label="Follow-up section"
+            disabled={disabled}
+            onChange={(event) => onFollowUpActionChange('section', event.target.value)}
+            value={followUpAction.section}
+          >
+            {actionSections.map((section) => <option key={section}>{section}</option>)}
+          </select>
+          <select
+            aria-label="Follow-up priority"
+            disabled={disabled}
+            onChange={(event) => onFollowUpActionChange('priority', event.target.value)}
+            value={followUpAction.priority}
+          >
+            {actionPriorities.map((priority) => <option key={priority}>{priority}</option>)}
+          </select>
+          <input
+            aria-label="Follow-up due date"
+            disabled={disabled}
+            onChange={(event) => onFollowUpActionChange('dueDate', event.target.value)}
+            type="date"
+            value={followUpAction.dueDate}
+          />
+        </div>
+        <textarea
+          aria-label="Follow-up description"
+          disabled={disabled}
+          onChange={(event) => onFollowUpActionChange('description', event.target.value)}
+          placeholder="Optional context"
+          rows={3}
+          value={followUpAction.description}
+        />
+        <button
+          className="secondary"
+          disabled={disabled || !followUpAction.title.trim() || !followUpAction.dueDate}
+          type="button"
+          onClick={onCreateFollowUpAction}
+        >
+          Add follow-up
+        </button>
       </div>
 
       <div className="reschedule-box">

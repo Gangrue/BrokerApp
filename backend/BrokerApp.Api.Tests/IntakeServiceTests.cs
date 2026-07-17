@@ -1,5 +1,6 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
+using BrokerApp.Api.Features.Actions;
 using BrokerApp.Api.Features.Dashboard;
 using BrokerApp.Api.Features.Intake;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +15,7 @@ public sealed class IntakeServiceTests
         var today = new DateOnly(2026, 7, 17);
         await using var dbContext = CreateDbContext();
         await DashboardTestData.SeedAsync(dbContext, today);
-        var service = new IntakeService(dbContext, new FixedClock(today));
+        var service = CreateService(dbContext, today);
 
         var response = await service.CreateFileAsync(CreateRequest("INT-100"));
 
@@ -40,7 +41,7 @@ public sealed class IntakeServiceTests
         var today = new DateOnly(2026, 7, 17);
         await using var dbContext = CreateDbContext();
         await DashboardTestData.SeedAsync(dbContext, today);
-        var service = new IntakeService(dbContext, new FixedClock(today));
+        var service = CreateService(dbContext, today);
 
         var response = await service.CreateFileAsync(CreateRequest(
             "INT-101",
@@ -58,7 +59,7 @@ public sealed class IntakeServiceTests
         var today = new DateOnly(2026, 7, 17);
         await using var dbContext = CreateDbContext();
         await DashboardTestData.SeedAsync(dbContext, today);
-        var service = new IntakeService(dbContext, new FixedClock(today));
+        var service = CreateService(dbContext, today);
 
         var exception = await Assert.ThrowsAsync<IntakeValidationException>(
             () => service.CreateFileAsync(CreateRequest("LN-TEST")));
@@ -72,7 +73,7 @@ public sealed class IntakeServiceTests
         var today = new DateOnly(2026, 7, 17);
         await using var dbContext = CreateDbContext();
         await DashboardTestData.SeedAsync(dbContext, today);
-        var service = new IntakeService(dbContext, new FixedClock(today));
+        var service = CreateService(dbContext, today);
 
         await Assert.ThrowsAsync<IntakeValidationException>(
             () => service.CreateFileAsync(CreateRequest("INT-102", actions: [])));
@@ -95,7 +96,7 @@ public sealed class IntakeServiceTests
         var today = new DateOnly(2026, 7, 17);
         await using var dbContext = CreateDbContext();
         await DashboardTestData.SeedAsync(dbContext, today);
-        var service = new IntakeService(dbContext, new FixedClock(today));
+        var service = CreateService(dbContext, today);
 
         await Assert.ThrowsAsync<IntakeValidationException>(
             () => service.CreateFileAsync(CreateRequest("INT-104", actions:
@@ -140,5 +141,10 @@ public sealed class IntakeServiceTests
             .Options;
 
         return new BrokerAppDbContext(options);
+    }
+
+    private static IntakeService CreateService(BrokerAppDbContext dbContext, DateOnly today)
+    {
+        return new IntakeService(dbContext, new FixedClock(today), new ActionPublicIdGenerator(dbContext));
     }
 }

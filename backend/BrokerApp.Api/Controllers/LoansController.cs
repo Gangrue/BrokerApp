@@ -27,4 +27,22 @@ public sealed class LoansController : ControllerBase
 
         return loan is null ? NotFound() : Ok(loan);
     }
+
+    [HttpPost("{loanNumber}/actions")]
+    public async Task<ActionResult<CreateLoanActionResponse>> CreateAction(
+        string loanNumber,
+        CreateLoanActionRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var action = await _loanService.CreateActionAsync(loanNumber, request, cancellationToken);
+
+            return action is null ? NotFound() : Ok(action);
+        }
+        catch (LoanValidationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
 }

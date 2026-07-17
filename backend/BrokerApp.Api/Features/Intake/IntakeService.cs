@@ -1,5 +1,6 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
+using BrokerApp.Api.Features.Actions;
 using BrokerApp.Api.Features.Dashboard;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,14 +15,18 @@ public interface IIntakeService
 
 public sealed class IntakeService : IIntakeService
 {
-    private const int FirstGeneratedActionNumber = 1001;
     private readonly BrokerAppDbContext _dbContext;
     private readonly ISystemClock _clock;
+    private readonly IActionPublicIdGenerator _actionPublicIdGenerator;
 
-    public IntakeService(BrokerAppDbContext dbContext, ISystemClock clock)
+    public IntakeService(
+        BrokerAppDbContext dbContext,
+        ISystemClock clock,
+        IActionPublicIdGenerator actionPublicIdGenerator)
     {
         _dbContext = dbContext;
         _clock = clock;
+        _actionPublicIdGenerator = actionPublicIdGenerator;
     }
 
     public async Task<CreateFileIntakeResponse> CreateFileAsync(
@@ -85,7 +90,7 @@ public sealed class IntakeService : IIntakeService
         };
         _dbContext.Loans.Add(loan);
 
-        var actionIds = await GenerateActionIdsAsync(actionInputs.Count, cancellationToken);
+        var actionIds = await _actionPublicIdGenerator.GenerateAsync(actionInputs.Count, cancellationToken);
 
         foreach (var actionInput in actionInputs.Zip(actionIds))
         {
@@ -138,32 +143,6 @@ public sealed class IntakeService : IIntakeService
             $"{customer.LastName}, {customer.FirstName}",
             customerMatched,
             actionIds);
-    }
-
-    private async Task<IReadOnlyCollection<string>> GenerateActionIdsAsync(
-        int count,
-        CancellationToken cancellationToken)
-    {
-        var publicIds = await _dbContext.LoanActions
-            .AsNoTracking()
-            .Where(action => action.OrganizationId == DevDataIds.OrganizationId && action.PublicId.StartsWith("ACT-"))
-            .Select(action => action.PublicId)
-            .ToArrayAsync(cancellationToken);
-
-        var maxActionNumber = publicIds
-            .Select(ParseActionNumber)
-            .Where(number => number > 0)
-            .DefaultIfEmpty(FirstGeneratedActionNumber - 1)
-            .Max();
-
-        return Enumerable.Range(maxActionNumber + 1, count)
-            .Select(number => $"ACT-{number:0000}")
-            .ToArray();
-    }
-
-    private static int ParseActionNumber(string publicId)
-    {
-        return int.TryParse(publicId[4..], out var number) ? number : 0;
     }
 
     private static ValidCustomerInput ValidateCustomer(IntakeCustomerRequest? customer)

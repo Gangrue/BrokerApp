@@ -1,8 +1,10 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Features.Actions;
+using BrokerApp.Api.Features.Customers;
 using BrokerApp.Api.Features.Dashboard;
 using BrokerApp.Api.Features.Intake;
 using BrokerApp.Api.Features.Loans;
+using BrokerApp.Api.Features.Reports;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,9 +19,12 @@ if (!builder.Environment.IsEnvironment("Testing"))
 }
 builder.Services.AddControllers();
 builder.Services.AddScoped<IActionWorkflowService, ActionWorkflowService>();
+builder.Services.AddScoped<IActionPublicIdGenerator, ActionPublicIdGenerator>();
+builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IIntakeService, IntakeService>();
 builder.Services.AddScoped<ILoanService, LoanService>();
+builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddSingleton<ISystemClock, SystemClock>();
 
 var app = builder.Build();

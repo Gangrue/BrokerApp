@@ -65,6 +65,86 @@ export type ActionEvent = {
   occurredAtUtc: string
 }
 
+export type CustomerListItem = {
+  id: string
+  borrowerName: string
+  email: string | null
+  phone: string | null
+  status: string
+  loanCount: number
+  openActionCount: number
+  nextActionTitle: string | null
+  nextActionDueDate: string | null
+}
+
+export type CustomerDetail = {
+  id: string
+  borrowerName: string
+  email: string | null
+  phone: string | null
+  status: string
+  loans: CustomerLoan[]
+  openActions: CustomerAction[]
+}
+
+export type CustomerLoan = {
+  loanNumber: string
+  type: string
+  stage: string
+  status: string
+  targetCloseDate: string | null
+  openActionCount: number
+  nextActionTitle: string | null
+  nextActionDueDate: string | null
+}
+
+export type CustomerAction = {
+  id: string
+  loanNumber: string
+  title: string
+  section: string
+  priority: string
+  dueDate: string
+}
+
+export type ReportSummary = {
+  metrics: ReportMetric[]
+  pipelineByStage: ReportBreakdown[]
+  openActionsBySection: ReportBreakdown[]
+  openActionsByPriority: ReportBreakdown[]
+  upcomingClosings: ReportUpcomingClosing[]
+  oldestOpenActions: ReportAgingAction[]
+}
+
+export type ReportMetric = {
+  label: string
+  value: number
+}
+
+export type ReportBreakdown = {
+  label: string
+  value: number
+}
+
+export type ReportUpcomingClosing = {
+  loanNumber: string
+  borrowerName: string
+  stage: string
+  targetCloseDate: string | null
+  openActionCount: number
+}
+
+export type ReportAgingAction = {
+  id: string
+  borrowerName: string
+  loanNumber: string
+  title: string
+  section: string
+  priority: string
+  dueDate: string
+  daysOpen: number
+}
+
 export type CreateFileIntakeRequest = {
   customer: {
     firstName: string
@@ -94,6 +174,24 @@ export type CreateFileIntakeResponse = {
   borrowerName: string
   customerMatched: boolean
   createdActionIds: string[]
+}
+
+export type CreateLoanActionRequest = {
+  title: string
+  section: string
+  priority: string
+  dueDate: string
+  description: string | null
+}
+
+export type CreateLoanActionResponse = {
+  id: string
+  loanNumber: string
+  borrowerName: string
+  title: string
+  section: string
+  priority: string
+  dueDate: string
 }
 
 async function readErrorMessage(response: Response) {
@@ -144,8 +242,24 @@ export function getLoan(loanNumber: string) {
   return getJson<LoanDetail>(`/api/v1/loans/${encodeURIComponent(loanNumber)}`)
 }
 
+export function getCustomers() {
+  return getJson<CustomerListItem[]>('/api/v1/customers')
+}
+
+export function getCustomer(id: string) {
+  return getJson<CustomerDetail>(`/api/v1/customers/${encodeURIComponent(id)}`)
+}
+
+export function getReportSummary() {
+  return getJson<ReportSummary>('/api/v1/reports/summary')
+}
+
 export function createFileIntake(request: CreateFileIntakeRequest) {
   return postJson<CreateFileIntakeResponse>('/api/v1/intake/files', request)
+}
+
+export function createLoanAction(loanNumber: string, request: CreateLoanActionRequest) {
+  return postJson<CreateLoanActionResponse>(`/api/v1/loans/${encodeURIComponent(loanNumber)}/actions`, request)
 }
 
 export function completeAction(publicId: string) {

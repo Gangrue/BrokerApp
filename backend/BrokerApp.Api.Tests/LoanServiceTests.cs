@@ -1,4 +1,7 @@
 using BrokerApp.Api.Data;
+using BrokerApp.Api.Domain;
+using BrokerApp.Api.Features.Actions;
+using BrokerApp.Api.Features.Dashboard;
 using BrokerApp.Api.Features.Loans;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,7 +15,7 @@ public sealed class LoanServiceTests
         var today = new DateOnly(2026, 7, 17);
         await using var dbContext = CreateDbContext();
         await DashboardTestData.SeedAsync(dbContext, today);
-        var service = new LoanService(dbContext);
+        var service = CreateService(dbContext, today);
 
         var loan = await service.GetLoanAsync("LN-TEST");
 
@@ -29,7 +32,7 @@ public sealed class LoanServiceTests
         var today = new DateOnly(2026, 7, 17);
         await using var dbContext = CreateDbContext();
         await DashboardTestData.SeedAsync(dbContext, today);
-        var service = new LoanService(dbContext);
+        var service = CreateService(dbContext, today);
 
         var loans = await service.GetLoansAsync();
 
@@ -39,6 +42,72 @@ public sealed class LoanServiceTests
         Assert.NotNull(loan.NextActionTitle);
     }
 
+    [Fact]
+    public async Task CreateActionAsync_AddsOpenActionCreatedEventAndDashboardItem()
+    {
+        var today = new DateOnly(2026, 7, 17);
+        await using var dbContext = CreateDbContext();
+        await DashboardTestData.SeedAsync(dbContext, today);
+        var service = CreateService(dbContext, today);
+
+        var response = await service.CreateActionAsync("LN-TEST", new CreateLoanActionRequest(
+            "Confirm updated insurance binder",
+            ActionSections.Borrower,
+            ActionPriorities.High,
+            today.AddDays(2),
+            "Needed before final underwriting review."));
+
+        Assert.NotNull(response);
+        Assert.Equal("ACT-1001", response.Id);
+        Assert.Equal("LN-TEST", response.LoanNumber);
+        Assert.Contains(dbContext.LoanActions, action => action.PublicId == "ACT-1001"
+            && action.WorkflowStatus == ActionWorkflowStatuses.Open);
+        Assert.Contains(dbContext.ActionEvents, actionEvent => actionEvent.EventType == ActionEventTypes.Created
+            && actionEvent.Reason == "Created from loan workspace.");
+
+        var dashboard = await new DashboardService(dbContext, new FixedClock(today)).GetSummaryAsync();
+
+        Assert.Contains(dashboard.OpenActions, action => action.Id == "ACT-1001");
+    }
+
+    [Fact]
+    public async Task CreateActionAsync_ReturnsNullForMissingLoan()
+    {
+        var today = new DateOnly(2026, 7, 17);
+        await using var dbContext = CreateDbContext();
+        await DashboardTestData.SeedAsync(dbContext, today);
+        var service = CreateService(dbContext, today);
+
+        var response = await service.CreateActionAsync("MISSING", new CreateLoanActionRequest(
+            "Confirm updated insurance binder",
+            ActionSections.Borrower,
+            ActionPriorities.High,
+            today.AddDays(2),
+            null));
+
+        Assert.Null(response);
+    }
+
+    [Theory]
+    [InlineData("", "Borrower", "Normal")]
+    [InlineData("Confirm updated insurance binder", "Invalid", "Normal")]
+    [InlineData("Confirm updated insurance binder", "Borrower", "Urgent")]
+    public async Task CreateActionAsync_RejectsInvalidInput(string title, string section, string priority)
+    {
+        var today = new DateOnly(2026, 7, 17);
+        await using var dbContext = CreateDbContext();
+        await DashboardTestData.SeedAsync(dbContext, today);
+        var service = CreateService(dbContext, today);
+
+        await Assert.ThrowsAsync<LoanValidationException>(
+            () => service.CreateActionAsync("LN-TEST", new CreateLoanActionRequest(
+                title,
+                section,
+                priority,
+                today.AddDays(2),
+                null)));
+    }
+
     private static BrokerAppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<BrokerAppDbContext>()
@@ -46,5 +115,10 @@ public sealed class LoanServiceTests
             .Options;
 
         return new BrokerAppDbContext(options);
+    }
+
+    private static LoanService CreateService(BrokerAppDbContext dbContext, DateOnly today)
+    {
+        return new LoanService(dbContext, new FixedClock(today), new ActionPublicIdGenerator(dbContext));
     }
 }

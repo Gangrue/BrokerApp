@@ -1,5 +1,7 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
+using BrokerApp.Api.Features.Actions;
+using BrokerApp.Api.Features.Dashboard;
 using Microsoft.EntityFrameworkCore;
 
 namespace BrokerApp.Api.Features.Loans;
@@ -8,15 +10,26 @@ public interface ILoanService
 {
     Task<IReadOnlyCollection<LoanListItemDto>> GetLoansAsync(CancellationToken cancellationToken = default);
     Task<LoanDetailDto?> GetLoanAsync(string loanNumber, CancellationToken cancellationToken = default);
+    Task<CreateLoanActionResponse?> CreateActionAsync(
+        string loanNumber,
+        CreateLoanActionRequest request,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class LoanService : ILoanService
 {
     private readonly BrokerAppDbContext _dbContext;
+    private readonly ISystemClock _clock;
+    private readonly IActionPublicIdGenerator _actionPublicIdGenerator;
 
-    public LoanService(BrokerAppDbContext dbContext)
+    public LoanService(
+        BrokerAppDbContext dbContext,
+        ISystemClock clock,
+        IActionPublicIdGenerator actionPublicIdGenerator)
     {
         _dbContext = dbContext;
+        _clock = clock;
+        _actionPublicIdGenerator = actionPublicIdGenerator;
     }
 
     public async Task<IReadOnlyCollection<LoanListItemDto>> GetLoansAsync(CancellationToken cancellationToken = default)
@@ -112,10 +125,130 @@ public sealed class LoanService : ILoanService
             history);
     }
 
+    public async Task<CreateLoanActionResponse?> CreateActionAsync(
+        string loanNumber,
+        CreateLoanActionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var input = ValidateCreateAction(request);
+        var normalizedLoanNumber = Require(loanNumber, "Loan number");
+
+        var loan = await _dbContext.Loans
+            .Include(item => item.Customer)
+            .SingleOrDefaultAsync(
+                item => item.OrganizationId == DevDataIds.OrganizationId && item.LoanNumber == normalizedLoanNumber,
+                cancellationToken);
+
+        if (loan is null)
+        {
+            return null;
+        }
+
+        var actionId = (await _actionPublicIdGenerator.GenerateAsync(1, cancellationToken)).Single();
+        var now = _clock.UtcNow;
+        var action = new LoanAction
+        {
+            Id = Guid.NewGuid(),
+            OrganizationId = DevDataIds.OrganizationId,
+            LoanId = loan.Id,
+            AssignedUserId = DevDataIds.LoanOfficerId,
+            PublicId = actionId,
+            Type = "Condition",
+            Section = input.Section,
+            Title = input.Title,
+            Description = input.Description,
+            WorkflowStatus = ActionWorkflowStatuses.Open,
+            Priority = input.Priority,
+            DueDate = input.DueDate,
+            CreatedAtUtc = now
+        };
+
+        _dbContext.LoanActions.Add(action);
+        _dbContext.ActionEvents.Add(new ActionEvent
+        {
+            Id = Guid.NewGuid(),
+            LoanActionId = action.Id,
+            EventType = ActionEventTypes.Created,
+            ActorUserId = DevDataIds.LoanOfficerId,
+            Reason = "Created from loan workspace.",
+            OccurredAtUtc = now
+        });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new CreateLoanActionResponse(
+            action.PublicId,
+            loan.LoanNumber,
+            $"{loan.Customer.LastName}, {loan.Customer.FirstName}",
+            action.Title,
+            action.Section,
+            action.Priority,
+            action.DueDate);
+    }
+
     private static bool IsOpen(LoanAction action)
     {
         return action.WorkflowStatus != ActionWorkflowStatuses.Completed
             && action.WorkflowStatus != ActionWorkflowStatuses.Cancelled
             && action.CompletedAtUtc == null;
     }
+
+    private static ValidCreateActionInput ValidateCreateAction(CreateLoanActionRequest? request)
+    {
+        if (request is null)
+        {
+            throw new LoanValidationException("Action information is required.");
+        }
+
+        var section = Require(request.Section, "Action section");
+        var priority = Require(request.Priority, "Action priority");
+
+        if (section is not (ActionSections.Borrower or ActionSections.Title or ActionSections.Realtor))
+        {
+            throw new LoanValidationException("Action section is invalid.");
+        }
+
+        if (priority is not (ActionPriorities.Normal or ActionPriorities.High))
+        {
+            throw new LoanValidationException("Action priority is invalid.");
+        }
+
+        if (request.DueDate == default)
+        {
+            throw new LoanValidationException("Action due date is required.");
+        }
+
+        return new ValidCreateActionInput(
+            Require(request.Title, "Action title"),
+            section,
+            priority,
+            request.DueDate,
+            NormalizeOptional(request.Description));
+    }
+
+    private static string Require(string? value, string name)
+    {
+        var trimmed = NormalizeOptional(value);
+
+        if (trimmed is null)
+        {
+            throw new LoanValidationException($"{name} is required.");
+        }
+
+        return trimmed;
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        var trimmed = value?.Trim();
+
+        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
+    }
+
+    private sealed record ValidCreateActionInput(
+        string Title,
+        string Section,
+        string Priority,
+        DateOnly DueDate,
+        string? Description);
 }
