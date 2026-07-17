@@ -10,6 +10,36 @@ namespace BrokerApp.Api.Tests;
 public sealed class ActionWorkflowServiceTests
 {
     [Fact]
+    public async Task CreateEmailDraftAsync_ReturnsBorrowerDraftForAction()
+    {
+        var today = new DateOnly(2026, 7, 17);
+        await using var dbContext = CreateDbContext();
+        await DashboardTestData.SeedAsync(dbContext, today);
+        var workflowService = CreateService(dbContext, new FixedClock(today));
+
+        var draft = await workflowService.CreateEmailDraftAsync("ACT-OVERDUE");
+
+        Assert.NotNull(draft);
+        Assert.Equal("lloyd@example.test", draft.To);
+        Assert.Contains("LN-TEST", draft.Subject);
+        Assert.Contains("ACT-OVERDUE task", draft.Subject);
+        Assert.Contains("Hi Lloyd", draft.Body);
+        Assert.Contains("July 16, 2026", draft.Body);
+    }
+
+    [Fact]
+    public async Task CreateEmailDraftAsync_MissingActionReturnsNull()
+    {
+        await using var dbContext = CreateDbContext();
+        await DashboardTestData.SeedAsync(dbContext, new DateOnly(2026, 7, 17));
+        var workflowService = CreateService(dbContext, new FixedClock(new DateOnly(2026, 7, 17)));
+
+        var draft = await workflowService.CreateEmailDraftAsync("ACT-MISSING");
+
+        Assert.Null(draft);
+    }
+
+    [Fact]
     public async Task CompleteAsync_CompletesActionAndRemovesItFromDashboard()
     {
         var today = new DateOnly(2026, 7, 17);

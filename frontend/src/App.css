@@ -436,6 +436,51 @@ select {
   background: #ffffff;
 }
 
+.email-draft-box {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid #dce5e9;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.email-draft-box h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.email-draft-box p {
+  margin: 3px 0 0;
+  color: #687680;
+  font-size: 13px;
+}
+
+.email-draft-preview {
+  display: grid;
+  gap: 9px;
+}
+
+.email-draft-preview label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: #40505a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.email-draft-preview input,
+.email-draft-preview textarea {
+  width: 100%;
+  font-weight: 400;
+}
+
+.email-draft-preview textarea {
+  resize: vertical;
+}
+
 .follow-up-box h3 {
   margin: 0;
   font-size: 15px;

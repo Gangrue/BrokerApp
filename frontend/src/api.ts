@@ -68,6 +68,12 @@ export type ActionEvent = {
   occurredAtUtc: string
 }
 
+export type ActionEmailDraft = {
+  to: string
+  subject: string
+  body: string
+}
+
 export type CustomerListItem = {
   id: string
   borrowerName: string
@@ -375,6 +381,10 @@ export function getUsers() {
 
 export function getActionTemplate(id: string) {
   return getJson<ActionTemplateDetail>(`/api/v1/action-templates/${encodeURIComponent(id)}`)
+}
+
+export function getActionEmailDraft(publicId: string) {
+  return getJson<ActionEmailDraft>(`/api/v1/actions/${encodeURIComponent(publicId)}/email-draft`)
 }
 
 export function updateLoan(loanNumber: string, request: UpdateLoanRequest) {

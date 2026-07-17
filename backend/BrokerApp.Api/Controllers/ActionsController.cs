@@ -14,6 +14,16 @@ public sealed class ActionsController : ControllerBase
         _actionWorkflowService = actionWorkflowService;
     }
 
+    [HttpGet("{publicId}/email-draft")]
+    public async Task<ActionResult<ActionEmailDraftDto>> CreateEmailDraft(
+        string publicId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _actionWorkflowService.CreateEmailDraftAsync(publicId, cancellationToken);
+
+        return result is null ? NotFound() : Ok(result);
+    }
+
     [HttpPost("{publicId}/complete")]
     public async Task<ActionResult<ActionWorkflowResultDto>> Complete(
         string publicId,

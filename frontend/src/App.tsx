@@ -9,6 +9,7 @@ import {
   createLoanAction,
   generateLoanActions,
   getActionTemplate,
+  getActionEmailDraft,
   getActionTemplates,
   getCustomer,
   getCustomers,
@@ -26,6 +27,7 @@ import {
 import type {
   ActionTemplateDetail,
   ActionTemplateListItem,
+  ActionEmailDraft,
   DashboardAction,
   DashboardSummary,
   CustomerDetail,
@@ -304,8 +306,10 @@ function App() {
   const [templateForm, setTemplateForm] = useState<TemplateFormState>(() => emptyTemplateForm())
   const [customerEditForm, setCustomerEditForm] = useState<CustomerEditForm>(() => emptyCustomerEditForm())
   const [loanEditForm, setLoanEditForm] = useState<LoanEditForm>(() => emptyLoanEditForm())
+  const [emailDraft, setEmailDraft] = useState<ActionEmailDraft | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isMutating, setIsMutating] = useState(false)
+  const [isGeneratingEmailDraft, setIsGeneratingEmailDraft] = useState(false)
   const [isSubmittingIntake, setIsSubmittingIntake] = useState(false)
   const [isSavingTemplate, setIsSavingTemplate] = useState(false)
   const [isSavingCustomer, setIsSavingCustomer] = useState(false)
@@ -476,6 +480,10 @@ function App() {
     ?? filteredTemplates[0]
     ?? null
   ), [filteredTemplates, selectedTemplateId])
+
+  useEffect(() => {
+    setEmailDraft(null)
+  }, [selectedAction?.id])
 
   useEffect(() => {
     let isMounted = true
@@ -705,6 +713,43 @@ function App() {
       `${selectedAction.id} reassigned.`,
       selectedAction.id,
     )
+  }
+
+  function generateEmailDraftForSelectedAction() {
+    if (!selectedAction) {
+      return
+    }
+
+    void (async () => {
+      setIsGeneratingEmailDraft(true)
+      setWorkflowMessage(null)
+      setError(null)
+
+      try {
+        const draft = await getActionEmailDraft(selectedAction.id)
+        setEmailDraft(draft)
+        setWorkflowMessage(`Email draft ready for ${selectedAction.id}.`)
+      } catch (caughtError) {
+        setError(caughtError instanceof Error ? caughtError.message : 'Email draft request failed')
+      } finally {
+        setIsGeneratingEmailDraft(false)
+      }
+    })()
+  }
+
+  function copyEmailDraft() {
+    if (!emailDraft) {
+      return
+    }
+
+    void (async () => {
+      try {
+        await navigator.clipboard.writeText(`To: ${emailDraft.to}\nSubject: ${emailDraft.subject}\n\n${emailDraft.body}`)
+        setWorkflowMessage('Email draft copied.')
+      } catch {
+        setError('Unable to copy email draft.')
+      }
+    })()
   }
 
   function updateFollowUpAction(field: keyof FollowUpActionForm, value: string) {
@@ -1168,7 +1213,9 @@ function App() {
               action={selectedAction}
               detail={loanDetail}
               disabled={isMutating || isSavingLoan}
+              emailDraft={emailDraft}
               followUpAction={followUpAction}
+              isGeneratingEmailDraft={isGeneratingEmailDraft}
               loanEditForm={loanEditForm}
               noteDraft={noteDraft}
               templates={templates.filter((template) => template.isActive)}
@@ -1176,9 +1223,11 @@ function App() {
               onAddNote={addNote}
               onCancel={cancelSelectedAction}
               onComplete={completeSelectedAction}
+              onCopyEmailDraft={copyEmailDraft}
               onCreateFollowUpAction={submitFollowUpAction}
               onDraftChange={setNoteDraft}
               onFollowUpActionChange={updateFollowUpAction}
+              onGenerateEmailDraft={generateEmailDraftForSelectedAction}
               onGenerateTemplateActions={generateTemplateActionsForSelectedLoan}
               onLoanEditFieldChange={updateLoanEditField}
               onLoanEditSubmit={submitLoanEdit}
@@ -2023,7 +2072,9 @@ function LoanContextPanel({
   cancelReason,
   detail,
   disabled,
+  emailDraft,
   followUpAction,
+  isGeneratingEmailDraft,
   loanEditForm,
   noteDraft,
   reassignReason,
@@ -2034,9 +2085,11 @@ function LoanContextPanel({
   onCancel,
   onCancelReasonChange,
   onComplete,
+  onCopyEmailDraft,
   onCreateFollowUpAction,
   onDraftChange,
   onFollowUpActionChange,
+  onGenerateEmailDraft,
   onGenerateTemplateActions,
   onLoanEditFieldChange,
   onLoanEditSubmit,
@@ -2053,7 +2106,9 @@ function LoanContextPanel({
   cancelReason: string
   detail: LoanDetail | null
   disabled: boolean
+  emailDraft: ActionEmailDraft | null
   followUpAction: FollowUpActionForm
+  isGeneratingEmailDraft: boolean
   loanEditForm: LoanEditForm
   noteDraft: string
   reassignReason: string
@@ -2064,9 +2119,11 @@ function LoanContextPanel({
   onCancel: () => void
   onCancelReasonChange: (value: string) => void
   onComplete: () => void
+  onCopyEmailDraft: () => void
   onCreateFollowUpAction: () => void
   onDraftChange: (value: string) => void
   onFollowUpActionChange: (field: keyof FollowUpActionForm, value: string) => void
+  onGenerateEmailDraft: () => void
   onGenerateTemplateActions: (templateId: string) => void
   onLoanEditFieldChange: (field: keyof LoanEditForm, value: string) => void
   onLoanEditSubmit: (event: FormEvent<HTMLFormElement>) => void
@@ -2178,6 +2235,38 @@ function LoanContextPanel({
 
       <div className="workflow-actions">
         <button disabled={disabled} type="button" onClick={onComplete}>Complete</button>
+      </div>
+
+      <div className="email-draft-box">
+        <div>
+          <h3>Borrower email</h3>
+          <p>Generate a draft for the selected condition.</p>
+        </div>
+        <button
+          className="secondary"
+          disabled={disabled || isGeneratingEmailDraft}
+          type="button"
+          onClick={onGenerateEmailDraft}
+        >
+          {isGeneratingEmailDraft ? 'Generating...' : 'Generate email'}
+        </button>
+        {emailDraft && (
+          <div className="email-draft-preview">
+            <label>
+              To
+              <input readOnly value={emailDraft.to || 'No borrower email on file'} />
+            </label>
+            <label>
+              Subject
+              <input readOnly value={emailDraft.subject} />
+            </label>
+            <label>
+              Body
+              <textarea readOnly rows={8} value={emailDraft.body} />
+            </label>
+            <button className="secondary" type="button" onClick={onCopyEmailDraft}>Copy draft</button>
+          </div>
+        )}
       </div>
 
       <div className="follow-up-box">

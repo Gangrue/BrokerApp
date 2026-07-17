@@ -3,11 +3,13 @@ using BrokerApp.Api.Domain;
 using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 
 namespace BrokerApp.Api.Features.Actions;
 
 public interface IActionWorkflowService
 {
+    Task<ActionEmailDraftDto?> CreateEmailDraftAsync(string publicId, CancellationToken cancellationToken = default);
     Task<ActionWorkflowResultDto?> CompleteAsync(string publicId, CompleteActionRequest request, CancellationToken cancellationToken = default);
     Task<ActionWorkflowResultDto?> RescheduleAsync(string publicId, RescheduleActionRequest request, CancellationToken cancellationToken = default);
     Task<ActionWorkflowResultDto?> AddCommentAsync(string publicId, AddActionCommentRequest request, CancellationToken cancellationToken = default);
@@ -26,6 +28,60 @@ public sealed class ActionWorkflowService : IActionWorkflowService
         _dbContext = dbContext;
         _clock = clock;
         _auditWriter = auditWriter;
+    }
+
+    public async Task<ActionEmailDraftDto?> CreateEmailDraftAsync(
+        string publicId,
+        CancellationToken cancellationToken = default)
+    {
+        var action = await _dbContext.LoanActions
+            .AsNoTracking()
+            .Include(item => item.Loan)
+                .ThenInclude(loan => loan.Customer)
+            .SingleOrDefaultAsync(
+                item => item.OrganizationId == DevDataIds.OrganizationId && item.PublicId == publicId,
+                cancellationToken);
+
+        if (action is null)
+        {
+            return null;
+        }
+
+        var customer = action.Loan.Customer;
+        var dueDate = action.DueDate.ToString("MMMM d, yyyy", CultureInfo.InvariantCulture);
+        var subject = $"{action.Loan.LoanNumber}: {action.Title}";
+        var body = $"""
+Hi {customer.FirstName},
+
+I am following up on your loan file {action.Loan.LoanNumber}. We need your help with the following item:
+
+{action.Title}
+
+Please send this over or let me know if you have questions. The current target date for this item is {dueDate}.
+
+Thank you,
+Demo Loan Officer
+""";
+
+        if (!string.IsNullOrWhiteSpace(action.Description))
+        {
+            body = $"""
+Hi {customer.FirstName},
+
+I am following up on your loan file {action.Loan.LoanNumber}. We need your help with the following item:
+
+{action.Title}
+
+{action.Description}
+
+Please send this over or let me know if you have questions. The current target date for this item is {dueDate}.
+
+Thank you,
+Demo Loan Officer
+""";
+        }
+
+        return new ActionEmailDraftDto(customer.Email ?? string.Empty, subject, body);
     }
 
     public async Task<ActionWorkflowResultDto?> CompleteAsync(
