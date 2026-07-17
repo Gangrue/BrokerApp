@@ -1,6 +1,7 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Features.Actions;
 using BrokerApp.Api.Features.Dashboard;
+using BrokerApp.Api.Features.Intake;
 using BrokerApp.Api.Features.Loans;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,6 +18,7 @@ if (!builder.Environment.IsEnvironment("Testing"))
 builder.Services.AddControllers();
 builder.Services.AddScoped<IActionWorkflowService, ActionWorkflowService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<IIntakeService, IntakeService>();
 builder.Services.AddScoped<ILoanService, LoanService>();
 builder.Services.AddSingleton<ISystemClock, SystemClock>();
 

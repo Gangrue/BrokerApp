@@ -65,6 +65,37 @@ export type ActionEvent = {
   occurredAtUtc: string
 }
 
+export type CreateFileIntakeRequest = {
+  customer: {
+    firstName: string
+    lastName: string
+    email: string | null
+    phone: string | null
+  }
+  loan: {
+    loanNumber: string
+    type: string
+    stage: string
+    amount: number | null
+    targetCloseDate: string | null
+  }
+  actions: Array<{
+    title: string
+    section: string
+    priority: string
+    dueDate: string
+    description: string | null
+  }>
+  initialNote: string | null
+}
+
+export type CreateFileIntakeResponse = {
+  loanNumber: string
+  borrowerName: string
+  customerMatched: boolean
+  createdActionIds: string[]
+}
+
 async function readErrorMessage(response: Response) {
   try {
     const body = await response.json() as { message?: string }
@@ -111,6 +142,10 @@ export function getLoans() {
 
 export function getLoan(loanNumber: string) {
   return getJson<LoanDetail>(`/api/v1/loans/${encodeURIComponent(loanNumber)}`)
+}
+
+export function createFileIntake(request: CreateFileIntakeRequest) {
+  return postJson<CreateFileIntakeResponse>('/api/v1/intake/files', request)
 }
 
 export function completeAction(publicId: string) {
