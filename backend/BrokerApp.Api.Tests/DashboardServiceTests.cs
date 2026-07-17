@@ -19,6 +19,10 @@ public sealed class DashboardServiceTests
         Assert.Equal(1, summary.OverdueCount);
         Assert.Equal(1, summary.DueTodayCount);
         Assert.Equal(1, summary.UpcomingCount);
+        Assert.Equal(1, summary.ClosingWithin7DaysCount);
+        Assert.Equal(1, summary.IcdNotSentOrSignedCount);
+        Assert.Contains(summary.ClosingWithin7Days, loan => loan.LoanNumber == "LN-TEST" && loan.DaysToClose == 5);
+        Assert.Contains(summary.IcdNeedsAttention, loan => loan.LoanNumber == "LN-TEST" && !loan.IcdSent && !loan.IcdSigned);
         Assert.Equal(["ACT-OVERDUE", "ACT-TODAY", "ACT-UPCOMING"], summary.OpenActions.Select(action => action.Id));
     }
 
@@ -46,6 +50,10 @@ public sealed class DashboardServiceTests
         Assert.Equal(0, summary.OverdueCount);
         Assert.Equal(0, summary.DueTodayCount);
         Assert.Equal(0, summary.UpcomingCount);
+        Assert.Equal(0, summary.ClosingWithin7DaysCount);
+        Assert.Equal(0, summary.IcdNotSentOrSignedCount);
+        Assert.Empty(summary.ClosingWithin7Days);
+        Assert.Empty(summary.IcdNeedsAttention);
         Assert.Empty(summary.OpenActions);
     }
 

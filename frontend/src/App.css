@@ -276,7 +276,7 @@ select {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -330,6 +330,58 @@ select {
   grid-template-columns: minmax(0, 1fr) 360px;
   gap: 16px;
   align-items: start;
+}
+
+.dashboard-alert-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.dashboard-alert-panel {
+  min-width: 0;
+}
+
+.dashboard-alert-list {
+  display: grid;
+  gap: 8px;
+}
+
+.dashboard-alert-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #e0e8ec;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17242c;
+  text-align: left;
+}
+
+.dashboard-alert-row span,
+.need-row span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dashboard-alert-row strong,
+.dashboard-alert-row small,
+.need-row strong,
+.need-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-alert-row small,
+.need-row small {
+  color: #687782;
+  font-size: 12px;
 }
 
 .panel {
@@ -763,13 +815,13 @@ select {
 }
 
 .pipeline-table {
-  min-width: 840px;
+  min-width: 1180px;
 }
 
 .pipeline-heading,
 .pipeline-row {
   display: grid;
-  grid-template-columns: 1.1fr 0.7fr 1fr 1.6fr 0.8fr;
+  grid-template-columns: 1.1fr 0.7fr 0.9fr 1fr 0.7fr 1fr 1.5fr 1.1fr;
   gap: 12px;
   align-items: center;
 }
@@ -871,7 +923,7 @@ select {
 .context-row {
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 10px;
   align-items: center;
   padding: 10px;
@@ -898,6 +950,43 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.needs-groups {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.needs-group {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #dce5e9;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.needs-group h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.needs-group p {
+  margin: 0;
+  color: #687782;
+  font-size: 13px;
+}
+
+.need-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px;
+  border-left: 3px solid #bed0d8;
+  border-radius: 0 7px 7px 0;
+  background: #f6f9fa;
 }
 
 .reports-page {
@@ -1349,6 +1438,7 @@ select {
   }
 
   .metrics,
+  .dashboard-alert-grid,
   .content-grid,
   .report-metrics,
   .report-grid,
@@ -1382,6 +1472,8 @@ select {
   .topbar-actions,
   .panel-header,
   .action-row,
+  .dashboard-alert-row,
+  .need-row,
   .customer-row,
   .activity-row,
   .template-row,

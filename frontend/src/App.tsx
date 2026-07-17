@@ -32,9 +32,11 @@ import type {
   ActionEmailDraft,
   CurrentUser,
   DashboardAction,
+  DashboardLoanAlert,
   DashboardSummary,
   CustomerDetail,
   CustomerListItem,
+  LoanActionDetail,
   LoanDetail,
   LoanListItem,
   ReportSummary,
@@ -67,6 +69,14 @@ type IntakeFormState = {
   stage: string
   amount: string
   targetCloseDate: string
+  coBorrowerEmail: string
+  titleContactName: string
+  titleContactEmail: string
+  realtorName: string
+  realtorEmail: string
+  icdSent: boolean
+  icdSigned: boolean
+  lastContactDate: string
   actions: IntakeActionForm[]
   initialNote: string
   templateId: string
@@ -94,6 +104,14 @@ type LoanEditForm = {
   status: string
   amount: string
   targetCloseDate: string
+  coBorrowerEmail: string
+  titleContactName: string
+  titleContactEmail: string
+  realtorName: string
+  realtorEmail: string
+  icdSent: boolean
+  icdSigned: boolean
+  lastContactDate: string
 }
 
 type TemplateItemForm = {
@@ -118,6 +136,10 @@ const emptyDashboard: DashboardSummary = {
   overdueCount: 0,
   dueTodayCount: 0,
   upcomingCount: 0,
+  closingWithin7DaysCount: 0,
+  icdNotSentOrSignedCount: 0,
+  closingWithin7Days: [],
+  icdNeedsAttention: [],
   openActions: [],
 }
 
@@ -165,6 +187,30 @@ function formatDateTime(value: string) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(new Date(value))
+}
+
+function formatDaysToClose(value: number | null) {
+  if (value == null) {
+    return 'No close date'
+  }
+
+  if (value === 0) {
+    return 'Closes today'
+  }
+
+  return value > 0 ? `${value} days to close` : `${Math.abs(value)} days past close`
+}
+
+function formatIcdStatus(icdSent: boolean, icdSigned: boolean) {
+  if (icdSent && icdSigned) {
+    return 'Sent and signed'
+  }
+
+  if (icdSent) {
+    return 'Sent, not signed'
+  }
+
+  return 'Not sent'
 }
 
 function addDays(value: string, days: number) {
@@ -215,6 +261,14 @@ function emptyLoanEditForm(): LoanEditForm {
     status: 'Active',
     amount: '',
     targetCloseDate: '',
+    coBorrowerEmail: '',
+    titleContactName: '',
+    titleContactEmail: '',
+    realtorName: '',
+    realtorEmail: '',
+    icdSent: false,
+    icdSigned: false,
+    lastContactDate: '',
   }
 }
 
@@ -231,6 +285,14 @@ function emptyIntakeForm(): IntakeFormState {
     stage: 'New file',
     amount: '',
     targetCloseDate: '',
+    coBorrowerEmail: '',
+    titleContactName: '',
+    titleContactEmail: '',
+    realtorName: '',
+    realtorEmail: '',
+    icdSent: false,
+    icdSigned: false,
+    lastContactDate: '',
     actions: [emptyIntakeAction()],
     initialNote: '',
     templateId: '',
@@ -295,6 +357,14 @@ function buildCustomerLoanRequest(form: IntakeFormState) {
       stage: form.stage,
       amount: form.amount.trim() ? Number(form.amount) : null,
       targetCloseDate: optionalText(form.targetCloseDate),
+      coBorrowerEmail: optionalText(form.coBorrowerEmail),
+      titleContactName: optionalText(form.titleContactName),
+      titleContactEmail: optionalText(form.titleContactEmail),
+      realtorName: optionalText(form.realtorName),
+      realtorEmail: optionalText(form.realtorEmail),
+      icdSent: form.icdSent,
+      icdSigned: form.icdSigned,
+      lastContactDate: optionalText(form.lastContactDate),
     },
     actions: form.templateId ? [] : form.actions.map((action) => ({
       title: action.title.trim(),
@@ -620,6 +690,14 @@ function App() {
       status: loanDetail.status,
       amount: loanDetail.amount == null ? '' : String(loanDetail.amount),
       targetCloseDate: loanDetail.targetCloseDate ?? '',
+      coBorrowerEmail: loanDetail.coBorrowerEmail ?? '',
+      titleContactName: loanDetail.titleContactName ?? '',
+      titleContactEmail: loanDetail.titleContactEmail ?? '',
+      realtorName: loanDetail.realtorName ?? '',
+      realtorEmail: loanDetail.realtorEmail ?? '',
+      icdSent: loanDetail.icdSent,
+      icdSigned: loanDetail.icdSigned,
+      lastContactDate: loanDetail.lastContactDate ?? '',
     })
   }, [loanDetail])
 
@@ -932,7 +1010,7 @@ function App() {
     })()
   }
 
-  function updateLoanEditField(field: keyof LoanEditForm, value: string) {
+  function updateLoanEditField(field: keyof LoanEditForm, value: string | boolean) {
     setLoanEditForm((current) => ({
       ...current,
       [field]: value,
@@ -957,6 +1035,14 @@ function App() {
         status: loanEditForm.status,
         amount: loanEditForm.amount.trim() ? Number(loanEditForm.amount) : null,
         targetCloseDate: optionalText(loanEditForm.targetCloseDate),
+        coBorrowerEmail: optionalText(loanEditForm.coBorrowerEmail),
+        titleContactName: optionalText(loanEditForm.titleContactName),
+        titleContactEmail: optionalText(loanEditForm.titleContactEmail),
+        realtorName: optionalText(loanEditForm.realtorName),
+        realtorEmail: optionalText(loanEditForm.realtorEmail),
+        icdSent: loanEditForm.icdSent,
+        icdSigned: loanEditForm.icdSigned,
+        lastContactDate: optionalText(loanEditForm.lastContactDate),
       })
       await loadWorkspace(selectedAction?.id)
       setLoanDetail(saved)
@@ -1110,14 +1196,14 @@ function App() {
     }
   }
 
-  function updateIntakeField(field: keyof Omit<IntakeFormState, 'actions'>, value: string) {
+  function updateIntakeField(field: keyof Omit<IntakeFormState, 'actions'>, value: string | boolean) {
     setIntakeForm((current) => ({
       ...current,
       [field]: value,
     }))
   }
 
-  function updateCustomerLoanField(field: keyof Omit<IntakeFormState, 'actions'>, value: string) {
+  function updateCustomerLoanField(field: keyof Omit<IntakeFormState, 'actions'>, value: string | boolean) {
     setCustomerLoanForm((current) => ({
       ...current,
       [field]: value,
@@ -1345,6 +1431,16 @@ function App() {
               <strong>{dashboard.openActions.length}</strong>
               <small>Visible work items</small>
             </article>
+            <article>
+              <span>Closing soon</span>
+              <strong>{dashboard.closingWithin7DaysCount}</strong>
+              <small>Within 7 days</small>
+            </article>
+            <article>
+              <span>ICD attention</span>
+              <strong>{dashboard.icdNotSentOrSignedCount}</strong>
+              <small>Not sent or unsigned</small>
+            </article>
           </section>
         )}
 
@@ -1363,6 +1459,26 @@ function App() {
             onUpdateField={updateIntakeField}
           />
         ) : view === 'dashboard' ? (
+          <>
+          <section className="dashboard-alert-grid">
+            <DashboardAlertList
+              items={dashboard.closingWithin7Days}
+              title="Closing within 7 days"
+              onOpenLoan={(loanNumber) => {
+                setSelectedLoanNumber(loanNumber)
+                setView('loans')
+              }}
+            />
+            <DashboardAlertList
+              items={dashboard.icdNeedsAttention}
+              title="ICD not sent/signed"
+              onOpenLoan={(loanNumber) => {
+                setSelectedLoanNumber(loanNumber)
+                setView('loans')
+              }}
+            />
+          </section>
+
           <section className="content-grid">
             <div className="panel action-panel">
               <div className="panel-header">
@@ -1456,6 +1572,7 @@ function App() {
               rescheduleReason={rescheduleReason}
             />
           </section>
+          </>
         ) : view === 'customers' ? (
           <section className="content-grid">
             <div className="panel customer-panel">
@@ -1589,6 +1706,9 @@ function App() {
                   <span>Borrower</span>
                   <span>Loan</span>
                   <span>Stage</span>
+                  <span>Officer</span>
+                  <span>Conditions</span>
+                  <span>ICD</span>
                   <span>Next action</span>
                   <span>Due</span>
                 </div>
@@ -1603,8 +1723,11 @@ function App() {
                     <span>{loan.borrowerName}</span>
                     <span>{loan.loanNumber}</span>
                     <span>{loan.stage}</span>
+                    <span>{loan.loanOfficerName}</span>
+                    <span>{loan.totalOpenConditionCount} open</span>
+                    <span>{formatIcdStatus(loan.icdSent, loan.icdSigned)}</span>
                     <span>{loan.nextActionTitle ?? 'No open action'}</span>
-                    <span>{formatDueDate(loan.nextActionDueDate)}</span>
+                    <span>{formatDueDate(loan.nextActionDueDate)} - {formatDaysToClose(loan.daysToClose)}</span>
                   </button>
                 ))}
               </div>
@@ -1638,6 +1761,80 @@ function App() {
         </div>
       )}
     </main>
+  )
+}
+
+function DashboardAlertList({
+  items,
+  onOpenLoan,
+  title,
+}: {
+  items?: DashboardLoanAlert[]
+  onOpenLoan: (loanNumber: string) => void
+  title: string
+}) {
+  const visibleItems = items ?? []
+
+  return (
+    <section className="panel dashboard-alert-panel">
+      <div className="panel-header">
+        <div>
+          <h2>{title}</h2>
+          <p>{visibleItems.length} loans</p>
+        </div>
+      </div>
+      <div className="dashboard-alert-list">
+        {visibleItems.slice(0, 5).map((item) => (
+          <button className="dashboard-alert-row" key={`${title}-${item.loanNumber}`} type="button" onClick={() => onOpenLoan(item.loanNumber)}>
+            <span>
+              <strong>{item.borrowerName}</strong>
+              <small>{item.loanNumber} - {formatDaysToClose(item.daysToClose)}</small>
+            </span>
+            <span>
+              <strong>{formatDueDate(item.targetCloseDate)}</strong>
+              <small>{formatIcdStatus(item.icdSent, item.icdSigned)}</small>
+            </span>
+          </button>
+        ))}
+        {visibleItems.length === 0 && <p className="state-message">No loans need attention.</p>}
+      </div>
+    </section>
+  )
+}
+
+function LoanNeedsGroups({ actions }: { actions: LoanActionDetail[] }) {
+  const sections = ['Borrower', 'Title', 'Realtor']
+
+  return (
+    <div className="needs-groups">
+      {sections.map((section) => {
+        const sectionActions = actions.filter((action) => action.section === section)
+
+        return (
+          <section className="needs-group" key={section}>
+            <h3>{section} Needs</h3>
+            {sectionActions.map((action) => (
+              <div className="need-row" key={action.id}>
+                <span>
+                  <strong>{action.title}</strong>
+                  <small>
+                    {action.workflowStatus}
+                    {' - '}
+                    {action.priority}
+                    {action.assignedUserName ? ` - ${action.assignedUserName}` : ''}
+                  </small>
+                </span>
+                <span>
+                  <strong>{formatDueDate(action.dueDate)}</strong>
+                  <small>{action.completedAtUtc ? `Completed ${formatDateTime(action.completedAtUtc)}` : 'Open'}</small>
+                </span>
+              </div>
+            ))}
+            {sectionActions.length === 0 && <p>No {section.toLowerCase()} needs.</p>}
+          </section>
+        )
+      })}
+    </div>
   )
 }
 
@@ -1696,7 +1893,53 @@ function LoanPipelineDetailPanel({
           <dt>Borrower email</dt>
           <dd>{detail?.borrowerEmail ?? 'Not available'}</dd>
         </div>
+        <div>
+          <dt>Co-borrower email</dt>
+          <dd>{detail?.coBorrowerEmail ?? 'Not available'}</dd>
+        </div>
+        <div>
+          <dt>Loan officer</dt>
+          <dd>{detail?.loanOfficerName ?? selected.loanOfficerName}</dd>
+        </div>
+        <div>
+          <dt>Days to close</dt>
+          <dd>{formatDaysToClose(detail?.daysToClose ?? selected.daysToClose)}</dd>
+        </div>
+        <div>
+          <dt>ICD status</dt>
+          <dd>{formatIcdStatus(detail?.icdSent ?? selected.icdSent, detail?.icdSigned ?? selected.icdSigned)}</dd>
+        </div>
+        <div>
+          <dt>Title contact</dt>
+          <dd>{detail?.titleContactName ?? 'Not available'}</dd>
+        </div>
+        <div>
+          <dt>Title email</dt>
+          <dd>{detail?.titleContactEmail ?? 'Not available'}</dd>
+        </div>
+        <div>
+          <dt>Realtor</dt>
+          <dd>{detail?.realtorName ?? 'Not available'}</dd>
+        </div>
+        <div>
+          <dt>Realtor email</dt>
+          <dd>{detail?.realtorEmail ?? 'Not available'}</dd>
+        </div>
+        <div>
+          <dt>Last contact</dt>
+          <dd>{formatDueDate(detail?.lastContactDate ?? null)}</dd>
+        </div>
+        <div>
+          <dt>Open conditions</dt>
+          <dd>
+            B {detail?.borrowerOpenConditionCount ?? selected.borrowerOpenConditionCount}
+            {' / '}T {detail?.titleOpenConditionCount ?? selected.titleOpenConditionCount}
+            {' / '}R {detail?.realtorOpenConditionCount ?? selected.realtorOpenConditionCount}
+          </dd>
+        </div>
       </dl>
+
+      <LoanNeedsGroups actions={actions} />
 
       <form className="create-action-box" onSubmit={onCreateAction}>
         <div className="template-items-header">
@@ -2186,7 +2429,7 @@ function CustomerContextPanel({
   onSubmitLoan: (event: FormEvent<HTMLFormElement>) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onUpdateLoanAction: (index: number, field: keyof IntakeActionForm, value: string) => void
-  onUpdateLoanField: (field: keyof Omit<IntakeFormState, 'actions'>, value: string) => void
+  onUpdateLoanField: (field: keyof Omit<IntakeFormState, 'actions'>, value: string | boolean) => void
   onUpdateField: (field: keyof CustomerEditForm, value: string) => void
   selected: CustomerListItem | null
 }) {
@@ -2325,6 +2568,76 @@ function CustomerContextPanel({
             />
           </label>
           <label>
+            Co-borrower email
+            <input
+              disabled={loanDisabled}
+              onChange={(event) => onUpdateLoanField('coBorrowerEmail', event.target.value)}
+              type="email"
+              value={addLoanForm.coBorrowerEmail}
+            />
+          </label>
+          <label>
+            Title contact
+            <input
+              disabled={loanDisabled}
+              onChange={(event) => onUpdateLoanField('titleContactName', event.target.value)}
+              value={addLoanForm.titleContactName}
+            />
+          </label>
+          <label>
+            Title email
+            <input
+              disabled={loanDisabled}
+              onChange={(event) => onUpdateLoanField('titleContactEmail', event.target.value)}
+              type="email"
+              value={addLoanForm.titleContactEmail}
+            />
+          </label>
+          <label>
+            Realtor name
+            <input
+              disabled={loanDisabled}
+              onChange={(event) => onUpdateLoanField('realtorName', event.target.value)}
+              value={addLoanForm.realtorName}
+            />
+          </label>
+          <label>
+            Realtor email
+            <input
+              disabled={loanDisabled}
+              onChange={(event) => onUpdateLoanField('realtorEmail', event.target.value)}
+              type="email"
+              value={addLoanForm.realtorEmail}
+            />
+          </label>
+          <label>
+            Last contact
+            <input
+              disabled={loanDisabled}
+              onChange={(event) => onUpdateLoanField('lastContactDate', event.target.value)}
+              type="date"
+              value={addLoanForm.lastContactDate}
+            />
+          </label>
+          <label className="check-label">
+            <input
+              checked={addLoanForm.icdSent}
+              disabled={loanDisabled}
+              onChange={(event) => onUpdateLoanField('icdSent', event.target.checked)}
+              type="checkbox"
+            />
+            ICD sent
+          </label>
+          <label className="check-label">
+            <input
+              checked={addLoanForm.icdSigned}
+              disabled={loanDisabled}
+              onChange={(event) => onUpdateLoanField('icdSigned', event.target.checked)}
+              type="checkbox"
+            />
+            ICD signed
+          </label>
+          <label>
             Template
             <select disabled={loanDisabled} onChange={(event) => onUpdateLoanField('templateId', event.target.value)} value={addLoanForm.templateId}>
               <option value="">Manual actions</option>
@@ -2423,11 +2736,19 @@ function CustomerContextPanel({
           <button className="context-row" key={loan.loanNumber} type="button" onClick={() => onOpenLoan(loan.loanNumber)}>
             <span>
               <strong>{loan.loanNumber}</strong>
-              <small>{loan.type} - {loan.stage}</small>
+              <small>{loan.type} - {loan.stage} - {loan.loanOfficerName}</small>
             </span>
             <span>
-              <strong>{loan.openActionCount}</strong>
-              <small>Open</small>
+              <strong>{loan.totalOpenConditionCount}</strong>
+              <small>
+                B {loan.borrowerOpenConditionCount}
+                {' / '}T {loan.titleOpenConditionCount}
+                {' / '}R {loan.realtorOpenConditionCount}
+              </small>
+            </span>
+            <span>
+              <strong>{formatIcdStatus(loan.icdSent, loan.icdSigned)}</strong>
+              <small>{formatDaysToClose(loan.daysToClose)}</small>
             </span>
           </button>
         ))}
@@ -2473,7 +2794,7 @@ function IntakePage({
   onRemoveAction: (index: number) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onUpdateAction: (index: number, field: keyof IntakeActionForm, value: string) => void
-  onUpdateField: (field: keyof Omit<IntakeFormState, 'actions'>, value: string) => void
+  onUpdateField: (field: keyof Omit<IntakeFormState, 'actions'>, value: string | boolean) => void
 }) {
   return (
     <form className="intake-page" onSubmit={onSubmit}>
@@ -2594,6 +2915,76 @@ function IntakePage({
               type="date"
               value={form.targetCloseDate}
             />
+          </label>
+          <label>
+            Co-borrower email
+            <input
+              disabled={disabled}
+              onChange={(event) => onUpdateField('coBorrowerEmail', event.target.value)}
+              type="email"
+              value={form.coBorrowerEmail}
+            />
+          </label>
+          <label>
+            Title contact
+            <input
+              disabled={disabled}
+              onChange={(event) => onUpdateField('titleContactName', event.target.value)}
+              value={form.titleContactName}
+            />
+          </label>
+          <label>
+            Title email
+            <input
+              disabled={disabled}
+              onChange={(event) => onUpdateField('titleContactEmail', event.target.value)}
+              type="email"
+              value={form.titleContactEmail}
+            />
+          </label>
+          <label>
+            Realtor name
+            <input
+              disabled={disabled}
+              onChange={(event) => onUpdateField('realtorName', event.target.value)}
+              value={form.realtorName}
+            />
+          </label>
+          <label>
+            Realtor email
+            <input
+              disabled={disabled}
+              onChange={(event) => onUpdateField('realtorEmail', event.target.value)}
+              type="email"
+              value={form.realtorEmail}
+            />
+          </label>
+          <label>
+            Last contact
+            <input
+              disabled={disabled}
+              onChange={(event) => onUpdateField('lastContactDate', event.target.value)}
+              type="date"
+              value={form.lastContactDate}
+            />
+          </label>
+          <label className="check-label">
+            <input
+              checked={form.icdSent}
+              disabled={disabled}
+              onChange={(event) => onUpdateField('icdSent', event.target.checked)}
+              type="checkbox"
+            />
+            ICD sent
+          </label>
+          <label className="check-label">
+            <input
+              checked={form.icdSigned}
+              disabled={disabled}
+              onChange={(event) => onUpdateField('icdSigned', event.target.checked)}
+              type="checkbox"
+            />
+            ICD signed
           </label>
         </div>
       </section>
@@ -2775,7 +3166,7 @@ function LoanContextPanel({
   onFollowUpActionChange: (field: keyof FollowUpActionForm, value: string) => void
   onGenerateEmailDraft: () => void
   onGenerateTemplateActions: (templateId: string) => void
-  onLoanEditFieldChange: (field: keyof LoanEditForm, value: string) => void
+  onLoanEditFieldChange: (field: keyof LoanEditForm, value: string | boolean) => void
   onLoanEditSubmit: (event: FormEvent<HTMLFormElement>) => void
   onReassign: () => void
   onReassignReasonChange: (value: string) => void
@@ -2833,10 +3224,56 @@ function LoanContextPanel({
           <dd>{detail?.borrowerEmail ?? 'Not available'}</dd>
         </div>
         <div>
+          <dt>Co-borrower email</dt>
+          <dd>{detail?.coBorrowerEmail ?? 'Not available'}</dd>
+        </div>
+        <div>
+          <dt>Loan officer</dt>
+          <dd>{detail?.loanOfficerName ?? 'Loading'}</dd>
+        </div>
+        <div>
+          <dt>Days to close</dt>
+          <dd>{formatDaysToClose(detail?.daysToClose ?? null)}</dd>
+        </div>
+        <div>
+          <dt>ICD status</dt>
+          <dd>{detail ? formatIcdStatus(detail.icdSent, detail.icdSigned) : 'Loading'}</dd>
+        </div>
+        <div>
+          <dt>Title contact</dt>
+          <dd>{detail?.titleContactName ?? 'Not available'}</dd>
+        </div>
+        <div>
+          <dt>Title email</dt>
+          <dd>{detail?.titleContactEmail ?? 'Not available'}</dd>
+        </div>
+        <div>
+          <dt>Realtor</dt>
+          <dd>{detail?.realtorName ?? 'Not available'}</dd>
+        </div>
+        <div>
+          <dt>Realtor email</dt>
+          <dd>{detail?.realtorEmail ?? 'Not available'}</dd>
+        </div>
+        <div>
+          <dt>Last contact</dt>
+          <dd>{formatDueDate(detail?.lastContactDate ?? null)}</dd>
+        </div>
+        <div>
+          <dt>Date added</dt>
+          <dd>{detail ? formatDateTime(detail.createdAtUtc) : 'Loading'}</dd>
+        </div>
+        <div>
+          <dt>Last updated</dt>
+          <dd>{detail ? formatDateTime(detail.updatedAtUtc) : 'Loading'}</dd>
+        </div>
+        <div>
           <dt>Assignee</dt>
           <dd>{selectedLoanAction?.assignedUserName ?? 'Unassigned'}</dd>
         </div>
       </dl>
+
+      <LoanNeedsGroups actions={detail?.actions ?? []} />
 
       <form className="edit-box" onSubmit={onLoanEditSubmit}>
         <div>
@@ -2881,6 +3318,76 @@ function LoanContextPanel({
               type="date"
               value={loanEditForm.targetCloseDate}
             />
+          </label>
+          <label>
+            Co-borrower email
+            <input
+              disabled={disabled}
+              onChange={(event) => onLoanEditFieldChange('coBorrowerEmail', event.target.value)}
+              type="email"
+              value={loanEditForm.coBorrowerEmail}
+            />
+          </label>
+          <label>
+            Title contact
+            <input
+              disabled={disabled}
+              onChange={(event) => onLoanEditFieldChange('titleContactName', event.target.value)}
+              value={loanEditForm.titleContactName}
+            />
+          </label>
+          <label>
+            Title email
+            <input
+              disabled={disabled}
+              onChange={(event) => onLoanEditFieldChange('titleContactEmail', event.target.value)}
+              type="email"
+              value={loanEditForm.titleContactEmail}
+            />
+          </label>
+          <label>
+            Realtor name
+            <input
+              disabled={disabled}
+              onChange={(event) => onLoanEditFieldChange('realtorName', event.target.value)}
+              value={loanEditForm.realtorName}
+            />
+          </label>
+          <label>
+            Realtor email
+            <input
+              disabled={disabled}
+              onChange={(event) => onLoanEditFieldChange('realtorEmail', event.target.value)}
+              type="email"
+              value={loanEditForm.realtorEmail}
+            />
+          </label>
+          <label>
+            Last contact
+            <input
+              disabled={disabled}
+              onChange={(event) => onLoanEditFieldChange('lastContactDate', event.target.value)}
+              type="date"
+              value={loanEditForm.lastContactDate}
+            />
+          </label>
+          <label className="check-label">
+            <input
+              checked={loanEditForm.icdSent}
+              disabled={disabled}
+              onChange={(event) => onLoanEditFieldChange('icdSent', event.target.checked)}
+              type="checkbox"
+            />
+            ICD sent
+          </label>
+          <label className="check-label">
+            <input
+              checked={loanEditForm.icdSigned}
+              disabled={disabled}
+              onChange={(event) => onLoanEditFieldChange('icdSigned', event.target.checked)}
+              type="checkbox"
+            />
+            ICD signed
           </label>
         </div>
         <button className="secondary" disabled={disabled || !loanEditForm.type || !loanEditForm.stage || !loanEditForm.status} type="submit">

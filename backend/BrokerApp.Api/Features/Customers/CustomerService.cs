@@ -76,6 +76,8 @@ public sealed class CustomerService : ICustomerService
             .AsSplitQuery()
             .Include(item => item.Loans)
                 .ThenInclude(loan => loan.Actions)
+            .Include(item => item.Loans)
+                .ThenInclude(loan => loan.OwnerUser)
             .SingleOrDefaultAsync(
                 item => item.OrganizationId == DevDataIds.OrganizationId && item.Id == id,
                 cancellationToken);
@@ -96,6 +98,7 @@ public sealed class CustomerService : ICustomerService
                     .ThenBy(action => action.Priority == ActionPriorities.High ? 0 : 1)
                     .ToArray();
                 var nextAction = openActions.FirstOrDefault();
+                var counts = CountOpenConditions(openActions);
 
                 return new CustomerLoanDto(
                     loan.LoanNumber,
@@ -103,6 +106,14 @@ public sealed class CustomerService : ICustomerService
                     loan.Stage,
                     loan.Status,
                     loan.TargetCloseDate,
+                    DaysToClose(loan.TargetCloseDate),
+                    loan.OwnerUser.DisplayName,
+                    loan.IcdSent,
+                    loan.IcdSigned,
+                    counts.Borrower,
+                    counts.Title,
+                    counts.Realtor,
+                    counts.Total,
                     openActions.Length,
                     nextAction?.Title,
                     nextAction?.DueDate);
@@ -227,6 +238,22 @@ public sealed class CustomerService : ICustomerService
             && action.CompletedAtUtc == null;
     }
 
+    private int? DaysToClose(DateOnly? targetCloseDate)
+    {
+        return targetCloseDate is null ? null : targetCloseDate.Value.DayNumber - _clock.Today.DayNumber;
+    }
+
+    private static OpenConditionCounts CountOpenConditions(IEnumerable<LoanAction> actions)
+    {
+        var actionArray = actions.ToArray();
+
+        return new OpenConditionCounts(
+            actionArray.Count(action => action.Section == ActionSections.Borrower),
+            actionArray.Count(action => action.Section == ActionSections.Title),
+            actionArray.Count(action => action.Section == ActionSections.Realtor),
+            actionArray.Length);
+    }
+
     private static ValidCustomerUpdate ValidateUpdate(UpdateCustomerRequest? request)
     {
         if (request is null)
@@ -282,4 +309,10 @@ public sealed class CustomerService : ICustomerService
         string? Email,
         string? Phone,
         string Status);
+
+    private sealed record OpenConditionCounts(
+        int Borrower,
+        int Title,
+        int Realtor,
+        int Total);
 }

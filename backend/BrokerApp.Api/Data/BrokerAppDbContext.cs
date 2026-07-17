@@ -94,6 +94,11 @@ public sealed class BrokerAppDbContext : DbContext
             entity.Property(e => e.Stage).HasMaxLength(80).IsRequired();
             entity.Property(e => e.Status).HasMaxLength(40).IsRequired();
             entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.CoBorrowerEmail).HasMaxLength(320);
+            entity.Property(e => e.TitleContactName).HasMaxLength(200);
+            entity.Property(e => e.TitleContactEmail).HasMaxLength(320);
+            entity.Property(e => e.RealtorName).HasMaxLength(200);
+            entity.Property(e => e.RealtorEmail).HasMaxLength(320);
             if (_usesInMemoryProvider)
             {
                 entity.Ignore(e => e.RowVersion);

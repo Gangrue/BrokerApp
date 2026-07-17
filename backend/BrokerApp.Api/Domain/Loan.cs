@@ -15,6 +15,14 @@ public sealed class Loan
     public string Status { get; set; } = "Active";
     public decimal? Amount { get; set; }
     public DateOnly? TargetCloseDate { get; set; }
+    public string? CoBorrowerEmail { get; set; }
+    public string? TitleContactName { get; set; }
+    public string? TitleContactEmail { get; set; }
+    public string? RealtorName { get; set; }
+    public string? RealtorEmail { get; set; }
+    public bool IcdSent { get; set; }
+    public bool IcdSigned { get; set; }
+    public DateOnly? LastContactDate { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
     public byte[] RowVersion { get; set; } = [];

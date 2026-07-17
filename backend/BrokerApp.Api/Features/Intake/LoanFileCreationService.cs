@@ -81,6 +81,14 @@ public sealed class LoanFileCreationService : ILoanFileCreationService
             Status = "Active",
             Amount = loanInput.Amount,
             TargetCloseDate = loanInput.TargetCloseDate,
+            CoBorrowerEmail = loanInput.CoBorrowerEmail,
+            TitleContactName = loanInput.TitleContactName,
+            TitleContactEmail = loanInput.TitleContactEmail,
+            RealtorName = loanInput.RealtorName,
+            RealtorEmail = loanInput.RealtorEmail,
+            IcdSent = loanInput.IcdSent,
+            IcdSigned = loanInput.IcdSigned,
+            LastContactDate = loanInput.LastContactDate,
             CreatedAtUtc = now,
             UpdatedAtUtc = now
         };
@@ -176,7 +184,15 @@ public sealed class LoanFileCreationService : ILoanFileCreationService
             Require(loan.Type, "Loan type"),
             Require(loan.Stage, "Loan stage"),
             loan.Amount,
-            loan.TargetCloseDate);
+            loan.TargetCloseDate,
+            NormalizeOptional(loan.CoBorrowerEmail),
+            NormalizeOptional(loan.TitleContactName),
+            NormalizeOptional(loan.TitleContactEmail),
+            NormalizeOptional(loan.RealtorName),
+            NormalizeOptional(loan.RealtorEmail),
+            loan.IcdSent,
+            loan.IcdSigned,
+            loan.LastContactDate);
     }
 
     private static IReadOnlyCollection<ValidActionInput> ValidateActions(
@@ -252,7 +268,15 @@ public sealed class LoanFileCreationService : ILoanFileCreationService
         string Type,
         string Stage,
         decimal? Amount,
-        DateOnly? TargetCloseDate);
+        DateOnly? TargetCloseDate,
+        string? CoBorrowerEmail,
+        string? TitleContactName,
+        string? TitleContactEmail,
+        string? RealtorName,
+        string? RealtorEmail,
+        bool IcdSent,
+        bool IcdSigned,
+        DateOnly? LastContactDate);
 
     private sealed record ValidActionInput(
         string Title,

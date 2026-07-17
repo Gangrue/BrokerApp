@@ -18,7 +18,15 @@ public sealed record IntakeLoanRequest(
     string Type,
     string Stage,
     decimal? Amount,
-    DateOnly? TargetCloseDate);
+    DateOnly? TargetCloseDate,
+    string? CoBorrowerEmail = null,
+    string? TitleContactName = null,
+    string? TitleContactEmail = null,
+    string? RealtorName = null,
+    string? RealtorEmail = null,
+    bool IcdSent = false,
+    bool IcdSigned = false,
+    DateOnly? LastContactDate = null);
 
 public sealed record IntakeActionRequest(
     string Title,

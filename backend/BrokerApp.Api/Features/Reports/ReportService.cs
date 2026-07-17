@@ -24,6 +24,7 @@ public sealed class ReportService : IReportService
     public async Task<ReportSummaryDto> GetSummaryAsync(CancellationToken cancellationToken = default)
     {
         var today = _clock.Today;
+        var sevenDaysFromToday = today.AddDays(7);
         var thirtyDaysFromToday = today.AddDays(30);
 
         var activeCustomerCount = await _dbContext.Customers
@@ -50,6 +51,8 @@ public sealed class ReportService : IReportService
             new ReportMetricDto("Open actions", openActions.Length),
             new ReportMetricDto("Overdue actions", openActions.Count(item => item.Action.DueDate < today)),
             new ReportMetricDto("High priority", openActions.Count(item => item.Action.Priority == ActionPriorities.High)),
+            new ReportMetricDto("Closing in 7 days", loans.Count(loan => loan.TargetCloseDate >= today && loan.TargetCloseDate <= sevenDaysFromToday)),
+            new ReportMetricDto("ICD attention", loans.Count(loan => !loan.IcdSent || !loan.IcdSigned)),
             new ReportMetricDto("Closing in 30 days", loans.Count(loan => loan.TargetCloseDate >= today && loan.TargetCloseDate <= thirtyDaysFromToday))
         };
 

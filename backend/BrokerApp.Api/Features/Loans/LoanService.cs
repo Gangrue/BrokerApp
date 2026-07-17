@@ -45,6 +45,7 @@ public sealed class LoanService : ILoanService
         var loans = await _dbContext.Loans
             .AsNoTracking()
             .Include(loan => loan.Customer)
+            .Include(loan => loan.OwnerUser)
             .Include(loan => loan.Actions)
             .Where(loan => loan.OrganizationId == DevDataIds.OrganizationId)
             .OrderBy(loan => loan.TargetCloseDate)
@@ -59,6 +60,7 @@ public sealed class LoanService : ILoanService
                 .ThenBy(action => action.Priority == ActionPriorities.High ? 0 : 1)
                 .ToArray();
             var nextAction = openActions.FirstOrDefault();
+            var counts = CountOpenConditions(openActions);
 
             return new LoanListItemDto(
                 loan.LoanNumber,
@@ -67,8 +69,17 @@ public sealed class LoanService : ILoanService
                 loan.Status,
                 openActions.Any(action => action.Priority == ActionPriorities.High) ? ActionPriorities.High : ActionPriorities.Normal,
                 openActions.Length,
+                counts.Borrower,
+                counts.Title,
+                counts.Realtor,
+                counts.Total,
                 nextAction?.Title,
-                nextAction?.DueDate);
+                nextAction?.DueDate,
+                loan.TargetCloseDate,
+                DaysToClose(loan.TargetCloseDate),
+                loan.OwnerUser.DisplayName,
+                loan.IcdSent,
+                loan.IcdSigned);
         }).ToArray();
     }
 
@@ -78,6 +89,7 @@ public sealed class LoanService : ILoanService
             .AsNoTracking()
             .AsSplitQuery()
             .Include(loan => loan.Customer)
+            .Include(loan => loan.OwnerUser)
             .Include(loan => loan.Actions)
                 .ThenInclude(action => action.AssignedUser)
             .Include(loan => loan.Actions)
@@ -122,17 +134,34 @@ public sealed class LoanService : ILoanService
                 actionEvent.OccurredAtUtc)))
             .OrderByDescending(actionEvent => actionEvent.OccurredAtUtc)
             .ToArray();
+        var counts = CountOpenConditions(loan.Actions.Where(IsOpen));
 
         return new LoanDetailDto(
             loan.LoanNumber,
             $"{loan.Customer.LastName}, {loan.Customer.FirstName}",
             loan.Customer.Email,
             loan.Customer.Phone,
+            loan.CoBorrowerEmail,
             loan.Type,
             loan.Stage,
             loan.Status,
             loan.Amount,
             loan.TargetCloseDate,
+            DaysToClose(loan.TargetCloseDate),
+            loan.OwnerUser.DisplayName,
+            loan.TitleContactName,
+            loan.TitleContactEmail,
+            loan.RealtorName,
+            loan.RealtorEmail,
+            loan.IcdSent,
+            loan.IcdSigned,
+            loan.LastContactDate,
+            loan.CreatedAtUtc,
+            loan.UpdatedAtUtc,
+            counts.Borrower,
+            counts.Title,
+            counts.Realtor,
+            counts.Total,
             actions,
             notes,
             history);
@@ -160,12 +189,28 @@ public sealed class LoanService : ILoanService
         AddChange(changedFields, nameof(loan.Status), loan.Status, input.Status);
         AddChange(changedFields, nameof(loan.Amount), loan.Amount?.ToString() ?? string.Empty, input.Amount?.ToString() ?? string.Empty);
         AddChange(changedFields, nameof(loan.TargetCloseDate), loan.TargetCloseDate?.ToString("O") ?? string.Empty, input.TargetCloseDate?.ToString("O") ?? string.Empty);
+        AddChange(changedFields, nameof(loan.CoBorrowerEmail), loan.CoBorrowerEmail ?? string.Empty, input.CoBorrowerEmail ?? string.Empty);
+        AddChange(changedFields, nameof(loan.TitleContactName), loan.TitleContactName ?? string.Empty, input.TitleContactName ?? string.Empty);
+        AddChange(changedFields, nameof(loan.TitleContactEmail), loan.TitleContactEmail ?? string.Empty, input.TitleContactEmail ?? string.Empty);
+        AddChange(changedFields, nameof(loan.RealtorName), loan.RealtorName ?? string.Empty, input.RealtorName ?? string.Empty);
+        AddChange(changedFields, nameof(loan.RealtorEmail), loan.RealtorEmail ?? string.Empty, input.RealtorEmail ?? string.Empty);
+        AddChange(changedFields, nameof(loan.IcdSent), loan.IcdSent.ToString(), input.IcdSent.ToString());
+        AddChange(changedFields, nameof(loan.IcdSigned), loan.IcdSigned.ToString(), input.IcdSigned.ToString());
+        AddChange(changedFields, nameof(loan.LastContactDate), loan.LastContactDate?.ToString("O") ?? string.Empty, input.LastContactDate?.ToString("O") ?? string.Empty);
 
         loan.Type = input.Type;
         loan.Stage = input.Stage;
         loan.Status = input.Status;
         loan.Amount = input.Amount;
         loan.TargetCloseDate = input.TargetCloseDate;
+        loan.CoBorrowerEmail = input.CoBorrowerEmail;
+        loan.TitleContactName = input.TitleContactName;
+        loan.TitleContactEmail = input.TitleContactEmail;
+        loan.RealtorName = input.RealtorName;
+        loan.RealtorEmail = input.RealtorEmail;
+        loan.IcdSent = input.IcdSent;
+        loan.IcdSigned = input.IcdSigned;
+        loan.LastContactDate = input.LastContactDate;
         loan.UpdatedAtUtc = _clock.UtcNow;
 
         if (changedFields.Count > 0)
@@ -255,6 +300,22 @@ public sealed class LoanService : ILoanService
             && action.CompletedAtUtc == null;
     }
 
+    private int? DaysToClose(DateOnly? targetCloseDate)
+    {
+        return targetCloseDate is null ? null : targetCloseDate.Value.DayNumber - _clock.Today.DayNumber;
+    }
+
+    private static OpenConditionCounts CountOpenConditions(IEnumerable<LoanAction> actions)
+    {
+        var actionArray = actions.ToArray();
+
+        return new OpenConditionCounts(
+            actionArray.Count(action => action.Section == ActionSections.Borrower),
+            actionArray.Count(action => action.Section == ActionSections.Title),
+            actionArray.Count(action => action.Section == ActionSections.Realtor),
+            actionArray.Length);
+    }
+
     private static ValidCreateActionInput ValidateCreateAction(CreateLoanActionRequest? request)
     {
         if (request is null)
@@ -307,7 +368,15 @@ public sealed class LoanService : ILoanService
             Require(request.Stage, "Loan stage"),
             status,
             request.Amount,
-            request.TargetCloseDate);
+            request.TargetCloseDate,
+            NormalizeOptional(request.CoBorrowerEmail),
+            NormalizeOptional(request.TitleContactName),
+            NormalizeOptional(request.TitleContactEmail),
+            NormalizeOptional(request.RealtorName),
+            NormalizeOptional(request.RealtorEmail),
+            request.IcdSent,
+            request.IcdSigned,
+            request.LastContactDate);
     }
 
     private static void AddChange(List<string> changes, string field, string oldValue, string newValue)
@@ -349,5 +418,19 @@ public sealed class LoanService : ILoanService
         string Stage,
         string Status,
         decimal? Amount,
-        DateOnly? TargetCloseDate);
+        DateOnly? TargetCloseDate,
+        string? CoBorrowerEmail,
+        string? TitleContactName,
+        string? TitleContactEmail,
+        string? RealtorName,
+        string? RealtorEmail,
+        bool IcdSent,
+        bool IcdSigned,
+        DateOnly? LastContactDate);
+
+    private sealed record OpenConditionCounts(
+        int Borrower,
+        int Title,
+        int Realtor,
+        int Total);
 }

@@ -22,6 +22,20 @@ public sealed class LoanServiceTests
 
         Assert.NotNull(loan);
         Assert.Equal("Daw, Lloyd", loan.BorrowerName);
+        Assert.Equal("co@example.test", loan.CoBorrowerEmail);
+        Assert.Equal("Test Title", loan.TitleContactName);
+        Assert.Equal("title@example.test", loan.TitleContactEmail);
+        Assert.Equal("Test Realtor", loan.RealtorName);
+        Assert.Equal("realtor@example.test", loan.RealtorEmail);
+        Assert.Equal("Test Loan Officer", loan.LoanOfficerName);
+        Assert.False(loan.IcdSent);
+        Assert.False(loan.IcdSigned);
+        Assert.Equal(today.AddDays(-1), loan.LastContactDate);
+        Assert.Equal(5, loan.DaysToClose);
+        Assert.Equal(3, loan.TotalOpenConditionCount);
+        Assert.Equal(3, loan.BorrowerOpenConditionCount);
+        Assert.Equal(0, loan.TitleOpenConditionCount);
+        Assert.Equal(0, loan.RealtorOpenConditionCount);
         Assert.Contains(loan.Actions, item => item.Id == "ACT-OVERDUE");
         Assert.Contains(loan.Notes, item => item.Body == "Initial test note.");
         Assert.Contains(loan.History, item => item.ActionId == "ACT-OVERDUE");
@@ -40,6 +54,11 @@ public sealed class LoanServiceTests
         var loan = Assert.Single(loans);
         Assert.Equal("LN-TEST", loan.LoanNumber);
         Assert.Equal(3, loan.OpenActionCount);
+        Assert.Equal(3, loan.TotalOpenConditionCount);
+        Assert.Equal(5, loan.DaysToClose);
+        Assert.Equal("Test Loan Officer", loan.LoanOfficerName);
+        Assert.False(loan.IcdSent);
+        Assert.False(loan.IcdSigned);
         Assert.NotNull(loan.NextActionTitle);
     }
 
@@ -122,13 +141,29 @@ public sealed class LoanServiceTests
             "Clear to close",
             "On Hold",
             510000,
-            today.AddDays(20)));
+            today.AddDays(20),
+            "updated.co@example.test",
+            "Updated Title",
+            "updated.title@example.test",
+            "Updated Realtor",
+            "updated.realtor@example.test",
+            true,
+            true,
+            today));
 
         Assert.NotNull(loan);
         Assert.Equal("Refinance", loan.Type);
         Assert.Equal("Clear to close", loan.Stage);
         Assert.Equal("On Hold", loan.Status);
         Assert.Equal(510000, loan.Amount);
+        Assert.Equal("updated.co@example.test", loan.CoBorrowerEmail);
+        Assert.Equal("Updated Title", loan.TitleContactName);
+        Assert.Equal("updated.title@example.test", loan.TitleContactEmail);
+        Assert.Equal("Updated Realtor", loan.RealtorName);
+        Assert.Equal("updated.realtor@example.test", loan.RealtorEmail);
+        Assert.True(loan.IcdSent);
+        Assert.True(loan.IcdSigned);
+        Assert.Equal(today, loan.LastContactDate);
         Assert.Contains(dbContext.AuditEvents, item => item.EntityId == "LN-TEST"
             && item.Operation == AuditOperations.Updated);
     }

@@ -23,6 +23,7 @@ public sealed class DashboardService : IDashboardService
     public async Task<DashboardSummaryDto> GetSummaryAsync(CancellationToken cancellationToken = default)
     {
         var today = _clock.Today;
+        var sevenDaysFromToday = today.AddDays(7);
 
         var actionRows = await _dbContext.LoanActions
             .AsNoTracking()
@@ -45,6 +46,14 @@ public sealed class DashboardService : IDashboardService
                 action.Loan.Customer.LastName
             })
             .ToListAsync(cancellationToken);
+        var loanRows = await _dbContext.Loans
+            .AsNoTracking()
+            .Include(loan => loan.Customer)
+            .Include(loan => loan.OwnerUser)
+            .Where(loan =>
+                loan.OrganizationId == DevDataIds.OrganizationId
+                && loan.Status == "Active")
+            .ToListAsync(cancellationToken);
 
         var actions = actionRows
             .Select(action =>
@@ -65,11 +74,39 @@ public sealed class DashboardService : IDashboardService
             .ThenBy(action => action.DueDate)
             .ThenBy(action => action.BorrowerName)
             .ToArray();
+        var closingWithin7Days = loanRows
+            .Where(loan => loan.TargetCloseDate >= today && loan.TargetCloseDate <= sevenDaysFromToday)
+            .OrderBy(loan => loan.TargetCloseDate)
+            .ThenBy(loan => loan.Customer.LastName)
+            .Select(ToAlert)
+            .ToArray();
+        var icdNeedsAttention = loanRows
+            .Where(loan => !loan.IcdSent || !loan.IcdSigned)
+            .OrderBy(loan => loan.TargetCloseDate)
+            .ThenBy(loan => loan.Customer.LastName)
+            .Select(ToAlert)
+            .ToArray();
 
         return new DashboardSummaryDto(
             actions.Count(action => action.Bucket == DashboardBucketClassifier.Overdue),
             actions.Count(action => action.Bucket == DashboardBucketClassifier.DueToday),
             actions.Count(action => action.Bucket == DashboardBucketClassifier.Upcoming),
+            closingWithin7Days.Length,
+            icdNeedsAttention.Length,
+            closingWithin7Days,
+            icdNeedsAttention,
             actions);
+    }
+
+    private DashboardLoanAlertDto ToAlert(Loan loan)
+    {
+        return new DashboardLoanAlertDto(
+            loan.LoanNumber,
+            $"{loan.Customer.LastName}, {loan.Customer.FirstName}",
+            loan.TargetCloseDate,
+            loan.TargetCloseDate is null ? null : loan.TargetCloseDate.Value.DayNumber - _clock.Today.DayNumber,
+            loan.OwnerUser.DisplayName,
+            loan.IcdSent,
+            loan.IcdSigned);
     }
 }

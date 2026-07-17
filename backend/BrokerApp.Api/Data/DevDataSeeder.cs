@@ -23,38 +23,49 @@ public static class DevDataSeeder
 
     private static readonly DemoLoan[] DemoLoans =
     [
-        new("30000000-0000-0000-0000-000000000001", "40000000-0000-0000-0000-000000000001", "Lloyd", "Daw", "lando@gmail.com", "LN-1001", "Processing", 12,
+        new("30000000-0000-0000-0000-000000000001", "40000000-0000-0000-0000-000000000001", "Lloyd", "Daw", "herbs@email.com", "wendy@email.com", "LN-1001", "Processing", 7, "Shana", "shana@email.com", "Maizey", "maizey@maizeyhomes.com", false, false, -1,
         [
-            new("50000000-0000-0000-0000-000000000001", "ACT-1001", "Collect updated bank statements", ActionSections.Borrower, ActionPriorities.High, -1),
+            new("50000000-0000-0000-0000-000000000001", "ACT-1001", "Stock statements - 2 months", ActionSections.Borrower, ActionPriorities.High, -1),
+            new("50000000-0000-0000-0000-000000000013", "ACT-1013", "Prelim CD", ActionSections.Title, ActionPriorities.Normal, -1),
+            new("50000000-0000-0000-0000-000000000014", "ACT-1014", "Addendum to contract", ActionSections.Realtor, ActionPriorities.High, 0),
             new("50000000-0000-0000-0000-000000000004", "ACT-1004", "Completed sample condition", ActionSections.Borrower, ActionPriorities.Normal, -2, ActionWorkflowStatuses.Completed)
         ]),
-        new("30000000-0000-0000-0000-000000000002", "40000000-0000-0000-0000-000000000002", "Katie", "Bennett", "katie@email.com", "LN-1002", "Processing", 5,
+        new("30000000-0000-0000-0000-000000000002", "40000000-0000-0000-0000-000000000002", "Mallorie", "Virgilio", "malmal@mail.com", null, "LN-1002", "Processing", 2, "Angela", "angela@email.com", "Emma", "emma@emmashomes.com", true, false, -2,
         [
-            new("50000000-0000-0000-0000-000000000002", "ACT-1002", "Confirm title contact needs list", ActionSections.Title, ActionPriorities.Normal, 0)
+            new("50000000-0000-0000-0000-000000000002", "ACT-1002", "Title Binder", ActionSections.Title, ActionPriorities.Normal, -8),
+            new("50000000-0000-0000-0000-000000000015", "ACT-1015", "Copy of signed contract", ActionSections.Realtor, ActionPriorities.High, -2),
+            new("50000000-0000-0000-0000-000000000016", "ACT-1016", "HOA information and fees", ActionSections.Realtor, ActionPriorities.Normal, -2),
+            new("50000000-0000-0000-0000-000000000017", "ACT-1017", "Most recent 2 paystubs", ActionSections.Borrower, ActionPriorities.High, -1)
         ]),
-        new("30000000-0000-0000-0000-000000000003", "40000000-0000-0000-0000-000000000003", "Shannon", "Alford", "shannon@email.com", "LN-1003", "Condition review", 18,
+        new("30000000-0000-0000-0000-000000000003", "40000000-0000-0000-0000-000000000003", "Shannon", "Alford", "shannon@email.com", null, "LN-1003", "Condition review", 18, "Kelsey", "kelsey@title.com", "Ron", "ron@homes.com", true, true, -5,
         [
             new("50000000-0000-0000-0000-000000000003", "ACT-1003", "Send realtor follow-up", ActionSections.Realtor, ActionPriorities.Normal, 3)
         ]),
-        new("30000000-0000-0000-0000-000000000004", "40000000-0000-0000-0000-000000000004", "Matthew", "Bateman", "matmalmik@gmail.com", "LN-1004", "Condition review", 8,
+        new("30000000-0000-0000-0000-000000000004", "40000000-0000-0000-0000-000000000004", "Matthew", "Bateman", "matmalmik@gmail.com", "meg@email.com", "LN-1004", "Condition review", 23, "Anthony", "anthony@title.com", "Fred", "fred@fredshomes.com", true, true, -4,
         [
-            new("50000000-0000-0000-0000-000000000005", "ACT-1005", "Request signed letter of explanation", ActionSections.Borrower, ActionPriorities.High, 0),
-            new("50000000-0000-0000-0000-000000000006", "ACT-1006", "Verify title payoff statement", ActionSections.Title, ActionPriorities.Normal, 4)
+            new("50000000-0000-0000-0000-000000000005", "ACT-1005", "paystub", ActionSections.Borrower, ActionPriorities.High, 14),
+            new("50000000-0000-0000-0000-000000000006", "ACT-1006", "Title Binder", ActionSections.Title, ActionPriorities.Normal, 17),
+            new("50000000-0000-0000-0000-000000000018", "ACT-1018", "Sellers disclosures to be provided", ActionSections.Realtor, ActionPriorities.Normal, 15)
         ]),
-        new("30000000-0000-0000-0000-000000000005", "40000000-0000-0000-0000-000000000005", "Mallorie", "Virgilio", "malmal@mail.com", "LN-1005", "Clear to close", 2,
+        new("30000000-0000-0000-0000-000000000005", "40000000-0000-0000-0000-000000000005", "Landon", "Spencer", "lando@gmail.com", "booboo@gmail.com", "LN-1005", "Clear to close", 5, "Ali", "ali@title.com", "Amanda", "amanda@realtor.com", true, true, -1,
         [
-            new("50000000-0000-0000-0000-000000000007", "ACT-1007", "Confirm final borrower availability", ActionSections.Borrower, ActionPriorities.Normal, 1)
+            new("50000000-0000-0000-0000-000000000007", "ACT-1007", "paystub from new job", ActionSections.Borrower, ActionPriorities.Normal, -2),
+            new("50000000-0000-0000-0000-000000000019", "ACT-1019", "Quit claim deed to be done at closing", ActionSections.Title, ActionPriorities.Normal, 4),
+            new("50000000-0000-0000-0000-000000000020", "ACT-1020", "Addendum to purchase price", ActionSections.Realtor, ActionPriorities.Normal, 0),
+            new("50000000-0000-0000-0000-000000000021", "ACT-1021", "Private road agreement", ActionSections.Realtor, ActionPriorities.High, -12)
         ]),
-        new("30000000-0000-0000-0000-000000000006", "40000000-0000-0000-0000-000000000006", "Justin", "Dougherty", "justin@gmail.com", "LN-1006", "Processing", 21,
+        new("30000000-0000-0000-0000-000000000006", "40000000-0000-0000-0000-000000000006", "Justin", "Dougherty", "justin@gmail.com", "sammy@gmail.com", "LN-1006", "Processing", 6, "Amy", "amy@title.com", "Tyler", "ty@homes.com", true, false, null,
         [
-            new("50000000-0000-0000-0000-000000000008", "ACT-1008", "Follow up on homeowner insurance binder", ActionSections.Borrower, ActionPriorities.Normal, 5),
-            new("50000000-0000-0000-0000-000000000009", "ACT-1009", "Ask realtor for inspection addendum", ActionSections.Realtor, ActionPriorities.High, -3)
+            new("50000000-0000-0000-0000-000000000008", "ACT-1008", "Missing page 4 of bank statement", ActionSections.Borrower, ActionPriorities.Normal, 4),
+            new("50000000-0000-0000-0000-000000000009", "ACT-1009", "Addendum Adding Samantha to contract", ActionSections.Realtor, ActionPriorities.High, 5),
+            new("50000000-0000-0000-0000-000000000022", "ACT-1022", "Title Binder", ActionSections.Title, ActionPriorities.Normal, 7),
+            new("50000000-0000-0000-0000-000000000023", "ACT-1023", "Wiring Instructions", ActionSections.Title, ActionPriorities.Normal, 7)
         ]),
-        new("30000000-0000-0000-0000-000000000007", "40000000-0000-0000-0000-000000000007", "Landon", "Spencer", "lando@example.com", "LN-1007", "New file", 30,
+        new("30000000-0000-0000-0000-000000000007", "40000000-0000-0000-0000-000000000007", "Claire", "Mason", "claire@example.com", null, "LN-1007", "New file", 30, "Mia", "mia@title.com", "Owen", "owen@homes.com", false, false, -3,
         [
             new("50000000-0000-0000-0000-000000000010", "ACT-1010", "Send welcome package", ActionSections.Borrower, ActionPriorities.Normal, 6)
         ]),
-        new("30000000-0000-0000-0000-000000000008", "40000000-0000-0000-0000-000000000008", "Claire", "Mason", "claire@example.com", "LN-1008", "Processing", 14,
+        new("30000000-0000-0000-0000-000000000008", "40000000-0000-0000-0000-000000000008", "Nora", "Ellis", "nora@example.com", "eli@example.com", "LN-1008", "Processing", 14, "Grace", "grace@title.com", "Liam", "liam@homes.com", true, false, -6,
         [
             new("50000000-0000-0000-0000-000000000011", "ACT-1011", "Collect updated employer contact", ActionSections.Borrower, ActionPriorities.High, 2),
             new("50000000-0000-0000-0000-000000000012", "ACT-1012", "Confirm title wire instructions", ActionSections.Title, ActionPriorities.Normal, 7)
@@ -190,9 +201,36 @@ public static class DevDataSeeder
                     Stage = demoLoan.Stage,
                     Status = "Active",
                     TargetCloseDate = today.AddDays(demoLoan.CloseInDays),
+                    CoBorrowerEmail = demoLoan.CoBorrowerEmail,
+                    TitleContactName = demoLoan.TitleContactName,
+                    TitleContactEmail = demoLoan.TitleContactEmail,
+                    RealtorName = demoLoan.RealtorName,
+                    RealtorEmail = demoLoan.RealtorEmail,
+                    IcdSent = demoLoan.IcdSent,
+                    IcdSigned = demoLoan.IcdSigned,
+                    LastContactDate = demoLoan.LastContactDaysAgo.HasValue
+                        ? today.AddDays(demoLoan.LastContactDaysAgo.Value)
+                        : null,
                     CreatedAtUtc = now,
                     UpdatedAtUtc = now
                 });
+            }
+            else
+            {
+                var loan = await dbContext.Loans.SingleAsync(loan => loan.Id == loanId);
+                if (loan.CoBorrowerEmail is null && loan.TitleContactName is null && loan.RealtorName is null)
+                {
+                    loan.CoBorrowerEmail = demoLoan.CoBorrowerEmail;
+                    loan.TitleContactName = demoLoan.TitleContactName;
+                    loan.TitleContactEmail = demoLoan.TitleContactEmail;
+                    loan.RealtorName = demoLoan.RealtorName;
+                    loan.RealtorEmail = demoLoan.RealtorEmail;
+                    loan.IcdSent = demoLoan.IcdSent;
+                    loan.IcdSigned = demoLoan.IcdSigned;
+                    loan.LastContactDate = demoLoan.LastContactDaysAgo.HasValue
+                        ? today.AddDays(demoLoan.LastContactDaysAgo.Value)
+                        : null;
+                }
             }
 
             if (!await dbContext.LoanNotes.AnyAsync(note => note.LoanId == loanId))
@@ -211,10 +249,13 @@ public static class DevDataSeeder
             foreach (var demoAction in demoLoan.Actions)
             {
                 var actionId = Guid.Parse(demoAction.Id);
+                var existingAction = await dbContext.LoanActions.FirstOrDefaultAsync(action =>
+                    action.Id == actionId ||
+                    (action.OrganizationId == DevDataIds.OrganizationId && action.PublicId == demoAction.PublicId));
 
-                if (!await dbContext.LoanActions.AnyAsync(action => action.Id == actionId))
+                if (existingAction is null)
                 {
-                    dbContext.LoanActions.Add(new LoanAction
+                    existingAction = new LoanAction
                     {
                         Id = actionId,
                         OrganizationId = DevDataIds.OrganizationId,
@@ -229,15 +270,17 @@ public static class DevDataSeeder
                         DueDate = today.AddDays(demoAction.DueInDays),
                         CompletedAtUtc = demoAction.WorkflowStatus == ActionWorkflowStatuses.Completed ? now.AddDays(-1) : null,
                         CreatedAtUtc = now.AddDays(-7)
-                    });
+                    };
+
+                    dbContext.LoanActions.Add(existingAction);
                 }
 
-                if (!await dbContext.ActionEvents.AnyAsync(actionEvent => actionEvent.LoanActionId == actionId))
+                if (!await dbContext.ActionEvents.AnyAsync(actionEvent => actionEvent.LoanActionId == existingAction.Id))
                 {
                     dbContext.ActionEvents.Add(new ActionEvent
                     {
                         Id = Guid.NewGuid(),
-                        LoanActionId = actionId,
+                        LoanActionId = existingAction.Id,
                         EventType = demoAction.WorkflowStatus == ActionWorkflowStatuses.Completed
                             ? ActionEventTypes.Completed
                             : ActionEventTypes.Created,
@@ -289,9 +332,17 @@ public static class DevDataSeeder
         string FirstName,
         string LastName,
         string Email,
+        string? CoBorrowerEmail,
         string LoanNumber,
         string Stage,
         int CloseInDays,
+        string TitleContactName,
+        string TitleContactEmail,
+        string RealtorName,
+        string RealtorEmail,
+        bool IcdSent,
+        bool IcdSigned,
+        int? LastContactDaysAgo,
         DemoAction[] Actions);
 
     private sealed record DemoTemplate(

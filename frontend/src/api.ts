@@ -13,7 +13,21 @@ export type DashboardSummary = {
   overdueCount: number
   dueTodayCount: number
   upcomingCount: number
+  closingWithin7DaysCount: number
+  icdNotSentOrSignedCount: number
+  closingWithin7Days: DashboardLoanAlert[]
+  icdNeedsAttention: DashboardLoanAlert[]
   openActions: DashboardAction[]
+}
+
+export type DashboardLoanAlert = {
+  loanNumber: string
+  borrowerName: string
+  targetCloseDate: string | null
+  daysToClose: number | null
+  loanOfficerName: string
+  icdSent: boolean
+  icdSigned: boolean
 }
 
 export type LoanListItem = {
@@ -23,8 +37,17 @@ export type LoanListItem = {
   status: string
   priority: string
   openActionCount: number
+  borrowerOpenConditionCount: number
+  titleOpenConditionCount: number
+  realtorOpenConditionCount: number
+  totalOpenConditionCount: number
   nextActionTitle: string | null
   nextActionDueDate: string | null
+  targetCloseDate: string | null
+  daysToClose: number | null
+  loanOfficerName: string
+  icdSent: boolean
+  icdSigned: boolean
 }
 
 export type LoanDetail = {
@@ -32,11 +55,27 @@ export type LoanDetail = {
   borrowerName: string
   borrowerEmail: string | null
   borrowerPhone: string | null
+  coBorrowerEmail: string | null
   type: string
   stage: string
   status: string
   amount: number | null
   targetCloseDate: string | null
+  daysToClose: number | null
+  loanOfficerName: string
+  titleContactName: string | null
+  titleContactEmail: string | null
+  realtorName: string | null
+  realtorEmail: string | null
+  icdSent: boolean
+  icdSigned: boolean
+  lastContactDate: string | null
+  createdAtUtc: string
+  updatedAtUtc: string
+  borrowerOpenConditionCount: number
+  titleOpenConditionCount: number
+  realtorOpenConditionCount: number
+  totalOpenConditionCount: number
   actions: LoanActionDetail[]
   notes: LoanNote[]
   history: ActionEvent[]
@@ -104,6 +143,14 @@ export type CustomerLoan = {
   stage: string
   status: string
   targetCloseDate: string | null
+  daysToClose: number | null
+  loanOfficerName: string
+  icdSent: boolean
+  icdSigned: boolean
+  borrowerOpenConditionCount: number
+  titleOpenConditionCount: number
+  realtorOpenConditionCount: number
+  totalOpenConditionCount: number
   openActionCount: number
   nextActionTitle: string | null
   nextActionDueDate: string | null
@@ -180,6 +227,14 @@ export type CreateFileIntakeRequest = {
     stage: string
     amount: number | null
     targetCloseDate: string | null
+    coBorrowerEmail: string | null
+    titleContactName: string | null
+    titleContactEmail: string | null
+    realtorName: string | null
+    realtorEmail: string | null
+    icdSent: boolean
+    icdSigned: boolean
+    lastContactDate: string | null
   }
   actions: Array<{
     title: string
@@ -206,6 +261,14 @@ export type CreateCustomerLoanRequest = {
     stage: string
     amount: number | null
     targetCloseDate: string | null
+    coBorrowerEmail: string | null
+    titleContactName: string | null
+    titleContactEmail: string | null
+    realtorName: string | null
+    realtorEmail: string | null
+    icdSent: boolean
+    icdSigned: boolean
+    lastContactDate: string | null
   }
   actions: Array<{
     title: string
@@ -256,6 +319,14 @@ export type UpdateLoanRequest = {
   status: string
   amount: number | null
   targetCloseDate: string | null
+  coBorrowerEmail: string | null
+  titleContactName: string | null
+  titleContactEmail: string | null
+  realtorName: string | null
+  realtorEmail: string | null
+  icdSent: boolean
+  icdSigned: boolean
+  lastContactDate: string | null
 }
 
 export type ActionTemplateListItem = {

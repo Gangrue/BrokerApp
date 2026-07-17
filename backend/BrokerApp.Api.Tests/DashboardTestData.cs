@@ -49,6 +49,15 @@ internal static class DashboardTestData
             Type = "Purchase",
             Stage = "Processing",
             Status = "Active",
+            TargetCloseDate = today.AddDays(5),
+            CoBorrowerEmail = "co@example.test",
+            TitleContactName = "Test Title",
+            TitleContactEmail = "title@example.test",
+            RealtorName = "Test Realtor",
+            RealtorEmail = "realtor@example.test",
+            IcdSent = false,
+            IcdSigned = false,
+            LastContactDate = today.AddDays(-1),
             CreatedAtUtc = now,
             UpdatedAtUtc = now
         };
