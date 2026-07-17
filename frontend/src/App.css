@@ -257,7 +257,7 @@ textarea {
   font-size: 13px;
 }
 
-.segmented-control button:first-child {
+.segmented-control button.active {
   background: #ffffff;
   color: #193d4c;
   box-shadow: 0 1px 2px rgba(23, 36, 44, 0.08);
@@ -390,9 +390,19 @@ textarea {
 
 .workflow-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 9px;
   margin-bottom: 16px;
+}
+
+.reschedule-box {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid #dce5e9;
+  border-radius: 8px;
+  background: #f7fafb;
 }
 
 .note-box {
@@ -401,10 +411,21 @@ textarea {
   margin-bottom: 16px;
 }
 
+.reschedule-box label,
 .note-box label {
   color: #40505a;
   font-size: 13px;
   font-weight: 700;
+}
+
+.reschedule-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.reschedule-controls input {
+  width: 100%;
 }
 
 .activity-feed {
@@ -519,7 +540,8 @@ textarea {
     justify-items: start;
   }
 
-  .workflow-actions {
+  .workflow-actions,
+  .reschedule-controls {
     grid-template-columns: 1fr;
   }
 }

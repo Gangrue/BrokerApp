@@ -16,6 +16,7 @@ import type {
 import './App.css'
 
 type WorkspaceView = 'dashboard' | 'loans'
+type QueueFilter = 'all' | 'overdue' | 'today' | 'high'
 
 const emptyDashboard: DashboardSummary = {
   overdueCount: 0,
@@ -71,7 +72,10 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null)
   const [view, setView] = useState<WorkspaceView>('dashboard')
+  const [queueFilter, setQueueFilter] = useState<QueueFilter>('all')
   const [noteDraft, setNoteDraft] = useState('')
+  const [rescheduleDate, setRescheduleDate] = useState('')
+  const [rescheduleReason, setRescheduleReason] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isMutating, setIsMutating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -130,21 +134,30 @@ function App() {
   const filteredActions = useMemo(() => {
     const query = searchTerm.trim().toLowerCase()
 
-    if (!query) {
-      return dashboard.openActions
-    }
+    return dashboard.openActions.filter((action) => {
+      const matchesFilter = queueFilter === 'all'
+        || (queueFilter === 'overdue' && action.bucket === 'Overdue')
+        || (queueFilter === 'today' && action.bucket === 'Due Today')
+        || (queueFilter === 'high' && action.priority === 'High')
 
-    return dashboard.openActions.filter((action) =>
-      [
+      if (!matchesFilter) {
+        return false
+      }
+
+      if (!query) {
+        return true
+      }
+
+      return [
         action.borrowerName,
         action.loanNumber,
         action.title,
         action.section,
         action.bucket,
         action.priority,
-      ].some((value) => value.toLowerCase().includes(query)),
-    )
-  }, [dashboard.openActions, searchTerm])
+      ].some((value) => value.toLowerCase().includes(query))
+    })
+  }, [dashboard.openActions, queueFilter, searchTerm])
 
   const filteredLoans = useMemo(() => {
     const query = searchTerm.trim().toLowerCase()
@@ -166,11 +179,10 @@ function App() {
   }, [loans, searchTerm])
 
   const selectedAction = useMemo(() => (
-    dashboard.openActions.find((action) => action.id === selectedActionId)
+    filteredActions.find((action) => action.id === selectedActionId)
     ?? filteredActions[0]
-    ?? dashboard.openActions[0]
     ?? null
-  ), [dashboard.openActions, filteredActions, selectedActionId])
+  ), [filteredActions, selectedActionId])
 
   useEffect(() => {
     let isMounted = true
@@ -199,6 +211,17 @@ function App() {
     return () => {
       isMounted = false
     }
+  }, [selectedAction])
+
+  useEffect(() => {
+    if (!selectedAction) {
+      setRescheduleDate('')
+      setRescheduleReason('')
+      return
+    }
+
+    setRescheduleDate(addDays(selectedAction.dueDate, 3))
+    setRescheduleReason('')
   }, [selectedAction])
 
   async function runWorkflow(
@@ -242,12 +265,12 @@ function App() {
   }
 
   function rescheduleSelectedAction() {
-    if (!selectedAction) {
+    if (!selectedAction || !rescheduleDate || !rescheduleReason.trim()) {
       return
     }
 
     void runWorkflow(
-      () => rescheduleAction(selectedAction.id, addDays(selectedAction.dueDate, 3)),
+      () => rescheduleAction(selectedAction.id, rescheduleDate, rescheduleReason.trim()),
       `${selectedAction.id} rescheduled.`,
       selectedAction.id,
     )
@@ -345,9 +368,18 @@ function App() {
                   <p>{filteredActions.length} visible</p>
                 </div>
                 <div className="segmented-control" aria-label="Queue filter">
-                  <button type="button">All</button>
-                  <button type="button">Mine</button>
-                  <button type="button">High</button>
+                  <button className={queueFilter === 'all' ? 'active' : ''} type="button" onClick={() => setQueueFilter('all')}>
+                    All
+                  </button>
+                  <button className={queueFilter === 'overdue' ? 'active' : ''} type="button" onClick={() => setQueueFilter('overdue')}>
+                    Overdue
+                  </button>
+                  <button className={queueFilter === 'today' ? 'active' : ''} type="button" onClick={() => setQueueFilter('today')}>
+                    Today
+                  </button>
+                  <button className={queueFilter === 'high' ? 'active' : ''} type="button" onClick={() => setQueueFilter('high')}>
+                    High
+                  </button>
                 </div>
               </div>
 
@@ -392,7 +424,11 @@ function App() {
               onAddNote={addNote}
               onComplete={completeSelectedAction}
               onDraftChange={setNoteDraft}
+              onRescheduleDateChange={setRescheduleDate}
+              onRescheduleReasonChange={setRescheduleReason}
               onReschedule={rescheduleSelectedAction}
+              rescheduleDate={rescheduleDate}
+              rescheduleReason={rescheduleReason}
             />
           </section>
         ) : (
@@ -445,7 +481,11 @@ function LoanContextPanel({
   onAddNote,
   onComplete,
   onDraftChange,
+  onRescheduleDateChange,
+  onRescheduleReasonChange,
   onReschedule,
+  rescheduleDate,
+  rescheduleReason,
 }: {
   action: DashboardAction | null
   detail: LoanDetail | null
@@ -454,7 +494,11 @@ function LoanContextPanel({
   onAddNote: () => void
   onComplete: () => void
   onDraftChange: (value: string) => void
+  onRescheduleDateChange: (value: string) => void
+  onRescheduleReasonChange: (value: string) => void
   onReschedule: () => void
+  rescheduleDate: string
+  rescheduleReason: string
 }) {
   if (!action) {
     return (
@@ -498,7 +542,33 @@ function LoanContextPanel({
 
       <div className="workflow-actions">
         <button disabled={disabled} type="button" onClick={onComplete}>Complete</button>
-        <button className="secondary" disabled={disabled} type="button" onClick={onReschedule}>Reschedule</button>
+      </div>
+
+      <div className="reschedule-box">
+        <label htmlFor="rescheduleDate">Reschedule</label>
+        <div className="reschedule-controls">
+          <input
+            id="rescheduleDate"
+            onChange={(event) => onRescheduleDateChange(event.target.value)}
+            type="date"
+            value={rescheduleDate}
+          />
+          <button
+            className="secondary"
+            disabled={disabled || !rescheduleDate || !rescheduleReason.trim()}
+            type="button"
+            onClick={onReschedule}
+          >
+            Save
+          </button>
+        </div>
+        <textarea
+          aria-label="Reschedule reason"
+          onChange={(event) => onRescheduleReasonChange(event.target.value)}
+          placeholder="Reason for changing the due date"
+          rows={3}
+          value={rescheduleReason}
+        />
       </div>
 
       <div className="note-box">

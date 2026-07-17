@@ -65,11 +65,21 @@ export type ActionEvent = {
   occurredAtUtc: string
 }
 
+async function readErrorMessage(response: Response) {
+  try {
+    const body = await response.json() as { message?: string }
+
+    return body.message ?? `Request failed with ${response.status}`
+  } catch {
+    return `Request failed with ${response.status}`
+  }
+}
+
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url)
 
   if (!response.ok) {
-    throw new Error(`Request failed with ${response.status}`)
+    throw new Error(await readErrorMessage(response))
   }
 
   return await response.json() as T
@@ -85,7 +95,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   })
 
   if (!response.ok) {
-    throw new Error(`Request failed with ${response.status}`)
+    throw new Error(await readErrorMessage(response))
   }
 
   return await response.json() as T
@@ -109,10 +119,10 @@ export function completeAction(publicId: string) {
   })
 }
 
-export function rescheduleAction(publicId: string, dueDate: string) {
+export function rescheduleAction(publicId: string, dueDate: string, reason: string) {
   return postJson(`/api/v1/actions/${encodeURIComponent(publicId)}/reschedule`, {
     dueDate,
-    reason: 'Rescheduled from workflow prototype.',
+    reason,
   })
 }
 
