@@ -27,4 +27,22 @@ public sealed class CustomersController : ControllerBase
 
         return customer is null ? NotFound() : Ok(customer);
     }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<CustomerDetailDto>> UpdateCustomer(
+        Guid id,
+        UpdateCustomerRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var customer = await _customerService.UpdateCustomerAsync(id, request, cancellationToken);
+
+            return customer is null ? NotFound() : Ok(customer);
+        }
+        catch (CustomerValidationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
 }

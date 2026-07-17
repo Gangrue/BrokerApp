@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   addActionComment,
+  cancelAction,
   completeAction,
   createActionTemplate,
   createFileIntake,
@@ -15,8 +16,12 @@ import {
   getLoan,
   getLoans,
   getReportSummary,
+  getUsers,
+  reassignAction,
   rescheduleAction,
   updateActionTemplate,
+  updateCustomer,
+  updateLoan,
 } from './api'
 import type {
   ActionTemplateDetail,
@@ -29,6 +34,7 @@ import type {
   LoanListItem,
   ReportSummary,
   UpsertActionTemplateRequest,
+  UserListItem,
 } from './api'
 import './App.css'
 
@@ -64,6 +70,22 @@ type FollowUpActionForm = {
   priority: string
   dueDate: string
   description: string
+}
+
+type CustomerEditForm = {
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+  status: string
+}
+
+type LoanEditForm = {
+  type: string
+  stage: string
+  status: string
+  amount: string
+  targetCloseDate: string
 }
 
 type TemplateItemForm = {
@@ -108,6 +130,8 @@ const sectionCopy: Record<string, string> = {
 
 const loanTypes = ['Purchase', 'Refinance', 'HELOC']
 const loanStages = ['New file', 'Processing', 'Condition review', 'Clear to close']
+const loanStatuses = ['Draft', 'Active', 'On Hold', 'Closed', 'Canceled']
+const customerStatuses = ['Active', 'Archived']
 const actionSections = ['Borrower', 'Title', 'Realtor']
 const actionPriorities = ['Normal', 'High']
 
@@ -162,6 +186,26 @@ function emptyFollowUpAction(): FollowUpActionForm {
     priority: 'Normal',
     dueDate: addDays(new Date().toISOString().slice(0, 10), 2),
     description: '',
+  }
+}
+
+function emptyCustomerEditForm(): CustomerEditForm {
+  return {
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    status: 'Active',
+  }
+}
+
+function emptyLoanEditForm(): LoanEditForm {
+  return {
+    type: 'Purchase',
+    stage: 'New file',
+    status: 'Active',
+    amount: '',
+    targetCloseDate: '',
   }
 }
 
@@ -238,6 +282,7 @@ function App() {
   const [customers, setCustomers] = useState<CustomerListItem[]>([])
   const [reportSummary, setReportSummary] = useState<ReportSummary>(emptyReportSummary)
   const [templates, setTemplates] = useState<ActionTemplateListItem[]>([])
+  const [users, setUsers] = useState<UserListItem[]>([])
   const [loanDetail, setLoanDetail] = useState<LoanDetail | null>(null)
   const [customerDetail, setCustomerDetail] = useState<CustomerDetail | null>(null)
   const [templateDetail, setTemplateDetail] = useState<ActionTemplateDetail | null>(null)
@@ -250,29 +295,38 @@ function App() {
   const [noteDraft, setNoteDraft] = useState('')
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [rescheduleReason, setRescheduleReason] = useState('')
+  const [cancelReason, setCancelReason] = useState('')
+  const [reassignUserId, setReassignUserId] = useState('')
+  const [reassignReason, setReassignReason] = useState('')
   const [intakeForm, setIntakeForm] = useState<IntakeFormState>(() => emptyIntakeForm())
   const [followUpAction, setFollowUpAction] = useState<FollowUpActionForm>(() => emptyFollowUpAction())
   const [templateForm, setTemplateForm] = useState<TemplateFormState>(() => emptyTemplateForm())
+  const [customerEditForm, setCustomerEditForm] = useState<CustomerEditForm>(() => emptyCustomerEditForm())
+  const [loanEditForm, setLoanEditForm] = useState<LoanEditForm>(() => emptyLoanEditForm())
   const [isLoading, setIsLoading] = useState(true)
   const [isMutating, setIsMutating] = useState(false)
   const [isSubmittingIntake, setIsSubmittingIntake] = useState(false)
   const [isSavingTemplate, setIsSavingTemplate] = useState(false)
+  const [isSavingCustomer, setIsSavingCustomer] = useState(false)
+  const [isSavingLoan, setIsSavingLoan] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
 
   async function loadWorkspace(preferredActionId?: string | null) {
-    const [dashboardSummary, loanRows, customerRows, reportRows, templateRows] = await Promise.all([
+    const [dashboardSummary, loanRows, customerRows, reportRows, templateRows, userRows] = await Promise.all([
       getDashboard(),
       getLoans(),
       getCustomers(),
       getReportSummary(),
       getActionTemplates(),
+      getUsers(),
     ])
     setDashboard(dashboardSummary)
     setLoans(loanRows)
     setCustomers(customerRows)
     setReportSummary(reportRows)
     setTemplates(templateRows)
+    setUsers(userRows)
 
     const nextSelectedActionId = preferredActionId
       && dashboardSummary.openActions.some((action) => action.id === preferredActionId)
@@ -452,6 +506,21 @@ function App() {
   }, [selectedAction])
 
   useEffect(() => {
+    if (!loanDetail) {
+      setLoanEditForm(emptyLoanEditForm())
+      return
+    }
+
+    setLoanEditForm({
+      type: loanDetail.type,
+      stage: loanDetail.stage,
+      status: loanDetail.status,
+      amount: loanDetail.amount == null ? '' : String(loanDetail.amount),
+      targetCloseDate: loanDetail.targetCloseDate ?? '',
+    })
+  }, [loanDetail])
+
+  useEffect(() => {
     let isMounted = true
 
     async function loadCustomerDetail() {
@@ -479,6 +548,21 @@ function App() {
       isMounted = false
     }
   }, [selectedCustomer, view])
+
+  useEffect(() => {
+    if (!customerDetail) {
+      setCustomerEditForm(emptyCustomerEditForm())
+      return
+    }
+
+    setCustomerEditForm({
+      firstName: customerDetail.firstName,
+      lastName: customerDetail.lastName,
+      email: customerDetail.email ?? '',
+      phone: customerDetail.phone ?? '',
+      status: customerDetail.status,
+    })
+  }, [customerDetail])
 
   useEffect(() => {
     let isMounted = true
@@ -522,8 +606,15 @@ function App() {
 
     setRescheduleDate(addDays(selectedAction.dueDate, 3))
     setRescheduleReason('')
+    setCancelReason('')
+    setReassignReason('')
     setFollowUpAction(emptyFollowUpAction())
   }, [selectedAction])
+
+  useEffect(() => {
+    const selectedLoanAction = loanDetail?.actions.find((item) => item.id === selectedAction?.id)
+    setReassignUserId(selectedLoanAction?.assignedUserId ?? users.find((user) => user.isActive)?.id ?? '')
+  }, [loanDetail, selectedAction, users])
 
   async function runWorkflow(
     action: () => Promise<unknown>,
@@ -591,6 +682,30 @@ function App() {
     )
   }
 
+  function cancelSelectedAction() {
+    if (!selectedAction || !cancelReason.trim()) {
+      return
+    }
+
+    void runWorkflow(
+      () => cancelAction(selectedAction.id, cancelReason.trim()),
+      `${selectedAction.id} cancelled.`,
+      null,
+    )
+  }
+
+  function reassignSelectedAction() {
+    if (!selectedAction || !reassignUserId || !reassignReason.trim()) {
+      return
+    }
+
+    void runWorkflow(
+      () => reassignAction(selectedAction.id, reassignUserId, reassignReason.trim()),
+      `${selectedAction.id} reassigned.`,
+      selectedAction.id,
+    )
+  }
+
   function updateFollowUpAction(field: keyof FollowUpActionForm, value: string) {
     setFollowUpAction((current) => ({
       ...current,
@@ -629,6 +744,79 @@ function App() {
         setIsMutating(false)
       }
     })()
+  }
+
+  function updateLoanEditField(field: keyof LoanEditForm, value: string) {
+    setLoanEditForm((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
+  async function submitLoanEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!loanDetail) {
+      return
+    }
+
+    setIsSavingLoan(true)
+    setWorkflowMessage(null)
+    setError(null)
+
+    try {
+      const saved = await updateLoan(loanDetail.loanNumber, {
+        type: loanEditForm.type,
+        stage: loanEditForm.stage,
+        status: loanEditForm.status,
+        amount: loanEditForm.amount.trim() ? Number(loanEditForm.amount) : null,
+        targetCloseDate: optionalText(loanEditForm.targetCloseDate),
+      })
+      await loadWorkspace(selectedAction?.id)
+      setLoanDetail(saved)
+      setWorkflowMessage(`${saved.loanNumber} updated.`)
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Loan update failed')
+    } finally {
+      setIsSavingLoan(false)
+    }
+  }
+
+  function updateCustomerEditField(field: keyof CustomerEditForm, value: string) {
+    setCustomerEditForm((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
+  async function submitCustomerEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!selectedCustomer) {
+      return
+    }
+
+    setIsSavingCustomer(true)
+    setWorkflowMessage(null)
+    setError(null)
+
+    try {
+      const saved = await updateCustomer(selectedCustomer.id, {
+        firstName: customerEditForm.firstName.trim(),
+        lastName: customerEditForm.lastName.trim(),
+        email: optionalText(customerEditForm.email),
+        phone: optionalText(customerEditForm.phone),
+        status: customerEditForm.status,
+      })
+      await loadWorkspace(selectedAction?.id)
+      setCustomerDetail(saved)
+      setSelectedCustomerId(saved.id)
+      setWorkflowMessage(`${saved.borrowerName} updated.`)
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Customer update failed')
+    } finally {
+      setIsSavingCustomer(false)
+    }
   }
 
   function generateTemplateActionsForSelectedLoan(templateId: string) {
@@ -978,19 +1166,31 @@ function App() {
             <LoanContextPanel
               action={selectedAction}
               detail={loanDetail}
-              disabled={isMutating}
+              disabled={isMutating || isSavingLoan}
               followUpAction={followUpAction}
+              loanEditForm={loanEditForm}
               noteDraft={noteDraft}
               templates={templates.filter((template) => template.isActive)}
+              users={users.filter((user) => user.isActive)}
               onAddNote={addNote}
+              onCancel={cancelSelectedAction}
               onComplete={completeSelectedAction}
               onCreateFollowUpAction={submitFollowUpAction}
               onDraftChange={setNoteDraft}
               onFollowUpActionChange={updateFollowUpAction}
               onGenerateTemplateActions={generateTemplateActionsForSelectedLoan}
+              onLoanEditFieldChange={updateLoanEditField}
+              onLoanEditSubmit={submitLoanEdit}
+              onCancelReasonChange={setCancelReason}
+              onReassign={reassignSelectedAction}
+              onReassignReasonChange={setReassignReason}
+              onReassignUserChange={setReassignUserId}
               onRescheduleDateChange={setRescheduleDate}
               onRescheduleReasonChange={setRescheduleReason}
               onReschedule={rescheduleSelectedAction}
+              cancelReason={cancelReason}
+              reassignReason={reassignReason}
+              reassignUserId={reassignUserId}
               rescheduleDate={rescheduleDate}
               rescheduleReason={rescheduleReason}
             />
@@ -1041,7 +1241,9 @@ function App() {
             </div>
 
             <CustomerContextPanel
+              customerForm={customerEditForm}
               detail={customerDetail}
+              disabled={isSavingCustomer}
               onOpenAction={(actionId) => {
                 setView('dashboard')
                 setSelectedActionId(actionId)
@@ -1050,6 +1252,8 @@ function App() {
                 setView('dashboard')
                 setSelectedActionId(dashboard.openActions.find((action) => action.loanNumber === loanNumber)?.id ?? null)
               }}
+              onSubmit={submitCustomerEdit}
+              onUpdateField={updateCustomerEditField}
               selected={selectedCustomer}
             />
           </section>
@@ -1411,14 +1615,22 @@ function BreakdownPanel({
 }
 
 function CustomerContextPanel({
+  customerForm,
   detail,
+  disabled,
   onOpenAction,
   onOpenLoan,
+  onSubmit,
+  onUpdateField,
   selected,
 }: {
+  customerForm: CustomerEditForm
   detail: CustomerDetail | null
+  disabled: boolean
   onOpenAction: (actionId: string) => void
   onOpenLoan: (loanNumber: string) => void
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+  onUpdateField: (field: keyof CustomerEditForm, value: string) => void
   selected: CustomerListItem | null
 }) {
   if (!selected) {
@@ -1452,6 +1664,59 @@ function CustomerContextPanel({
           <dd>{selected.nextActionTitle ?? 'None'}</dd>
         </div>
       </dl>
+
+      <form className="edit-box" onSubmit={onSubmit}>
+        <div>
+          <h3>Profile</h3>
+          <p>Borrower contact and record status.</p>
+        </div>
+        <div className="form-grid two-column">
+          <label>
+            First name
+            <input
+              disabled={disabled}
+              onChange={(event) => onUpdateField('firstName', event.target.value)}
+              required
+              value={customerForm.firstName}
+            />
+          </label>
+          <label>
+            Last name
+            <input
+              disabled={disabled}
+              onChange={(event) => onUpdateField('lastName', event.target.value)}
+              required
+              value={customerForm.lastName}
+            />
+          </label>
+          <label>
+            Email
+            <input
+              disabled={disabled}
+              onChange={(event) => onUpdateField('email', event.target.value)}
+              type="email"
+              value={customerForm.email}
+            />
+          </label>
+          <label>
+            Phone
+            <input
+              disabled={disabled}
+              onChange={(event) => onUpdateField('phone', event.target.value)}
+              value={customerForm.phone}
+            />
+          </label>
+          <label>
+            Status
+            <select disabled={disabled} onChange={(event) => onUpdateField('status', event.target.value)} value={customerForm.status}>
+              {customerStatuses.map((status) => <option key={status}>{status}</option>)}
+            </select>
+          </label>
+        </div>
+        <button className="secondary" disabled={disabled} type="submit">
+          {disabled ? 'Saving...' : 'Save profile'}
+        </button>
+      </form>
 
       <div className="activity-feed">
         <h3>Loans</h3>
@@ -1729,17 +1994,29 @@ function IntakePage({
 
 function LoanContextPanel({
   action,
+  cancelReason,
   detail,
   disabled,
   followUpAction,
+  loanEditForm,
   noteDraft,
+  reassignReason,
+  reassignUserId,
   templates,
+  users,
   onAddNote,
+  onCancel,
+  onCancelReasonChange,
   onComplete,
   onCreateFollowUpAction,
   onDraftChange,
   onFollowUpActionChange,
   onGenerateTemplateActions,
+  onLoanEditFieldChange,
+  onLoanEditSubmit,
+  onReassign,
+  onReassignReasonChange,
+  onReassignUserChange,
   onRescheduleDateChange,
   onRescheduleReasonChange,
   onReschedule,
@@ -1747,17 +2024,29 @@ function LoanContextPanel({
   rescheduleReason,
 }: {
   action: DashboardAction | null
+  cancelReason: string
   detail: LoanDetail | null
   disabled: boolean
   followUpAction: FollowUpActionForm
+  loanEditForm: LoanEditForm
   noteDraft: string
+  reassignReason: string
+  reassignUserId: string
   templates: ActionTemplateListItem[]
+  users: UserListItem[]
   onAddNote: () => void
+  onCancel: () => void
+  onCancelReasonChange: (value: string) => void
   onComplete: () => void
   onCreateFollowUpAction: () => void
   onDraftChange: (value: string) => void
   onFollowUpActionChange: (field: keyof FollowUpActionForm, value: string) => void
   onGenerateTemplateActions: (templateId: string) => void
+  onLoanEditFieldChange: (field: keyof LoanEditForm, value: string) => void
+  onLoanEditSubmit: (event: FormEvent<HTMLFormElement>) => void
+  onReassign: () => void
+  onReassignReasonChange: (value: string) => void
+  onReassignUserChange: (value: string) => void
   onRescheduleDateChange: (value: string) => void
   onRescheduleReasonChange: (value: string) => void
   onReschedule: () => void
@@ -1765,6 +2054,7 @@ function LoanContextPanel({
   rescheduleReason: string
 }) {
   const selectedGenerationTemplateId = templates[0]?.id ?? ''
+  const selectedLoanAction = detail?.actions.find((item) => item.id === action?.id) ?? null
 
   if (!action) {
     return (
@@ -1804,7 +2094,61 @@ function LoanContextPanel({
           <dt>Borrower email</dt>
           <dd>{detail?.borrowerEmail ?? 'Not available'}</dd>
         </div>
+        <div>
+          <dt>Assignee</dt>
+          <dd>{selectedLoanAction?.assignedUserName ?? 'Unassigned'}</dd>
+        </div>
       </dl>
+
+      <form className="edit-box" onSubmit={onLoanEditSubmit}>
+        <div>
+          <h3>Loan details</h3>
+          <p>Stage, status, amount, and close timing.</p>
+        </div>
+        <div className="form-grid two-column">
+          <label>
+            Type
+            <select disabled={disabled} onChange={(event) => onLoanEditFieldChange('type', event.target.value)} value={loanEditForm.type}>
+              {loanTypes.map((loanType) => <option key={loanType}>{loanType}</option>)}
+            </select>
+          </label>
+          <label>
+            Stage
+            <select disabled={disabled} onChange={(event) => onLoanEditFieldChange('stage', event.target.value)} value={loanEditForm.stage}>
+              {loanStages.map((stage) => <option key={stage}>{stage}</option>)}
+            </select>
+          </label>
+          <label>
+            Status
+            <select disabled={disabled} onChange={(event) => onLoanEditFieldChange('status', event.target.value)} value={loanEditForm.status}>
+              {loanStatuses.map((status) => <option key={status}>{status}</option>)}
+            </select>
+          </label>
+          <label>
+            Amount
+            <input
+              disabled={disabled}
+              min="0"
+              onChange={(event) => onLoanEditFieldChange('amount', event.target.value)}
+              step="1000"
+              type="number"
+              value={loanEditForm.amount}
+            />
+          </label>
+          <label>
+            Target close
+            <input
+              disabled={disabled}
+              onChange={(event) => onLoanEditFieldChange('targetCloseDate', event.target.value)}
+              type="date"
+              value={loanEditForm.targetCloseDate}
+            />
+          </label>
+        </div>
+        <button className="secondary" disabled={disabled || !loanEditForm.type || !loanEditForm.stage || !loanEditForm.status} type="submit">
+          {disabled ? 'Saving...' : 'Save loan'}
+        </button>
+      </form>
 
       <div className="workflow-actions">
         <button disabled={disabled} type="button" onClick={onComplete}>Complete</button>
@@ -1894,6 +2238,38 @@ function LoanContextPanel({
         </button>
       </div>
 
+      <div className="reassign-box">
+        <label htmlFor="reassignUser">Reassign</label>
+        <select
+          disabled={disabled || users.length === 0}
+          id="reassignUser"
+          onChange={(event) => onReassignUserChange(event.target.value)}
+          value={reassignUserId}
+        >
+          {users.map((user) => (
+            <option key={user.id} value={user.id}>
+              {user.displayName} - {user.role}
+            </option>
+          ))}
+        </select>
+        <textarea
+          aria-label="Reassignment reason"
+          disabled={disabled}
+          onChange={(event) => onReassignReasonChange(event.target.value)}
+          placeholder="Reason for reassignment"
+          rows={3}
+          value={reassignReason}
+        />
+        <button
+          className="secondary"
+          disabled={disabled || !reassignUserId || !reassignReason.trim()}
+          type="button"
+          onClick={onReassign}
+        >
+          Reassign
+        </button>
+      </div>
+
       <div className="reschedule-box">
         <label htmlFor="rescheduleDate">Reschedule</label>
         <div className="reschedule-controls">
@@ -1919,6 +2295,26 @@ function LoanContextPanel({
           rows={3}
           value={rescheduleReason}
         />
+      </div>
+
+      <div className="cancel-box">
+        <label htmlFor="cancelReason">Cancel action</label>
+        <textarea
+          id="cancelReason"
+          disabled={disabled}
+          onChange={(event) => onCancelReasonChange(event.target.value)}
+          placeholder="Reason this action no longer applies"
+          rows={3}
+          value={cancelReason}
+        />
+        <button
+          className="secondary danger"
+          disabled={disabled || !cancelReason.trim()}
+          type="button"
+          onClick={onCancel}
+        >
+          Cancel action
+        </button>
       </div>
 
       <div className="note-box">

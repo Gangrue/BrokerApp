@@ -1,6 +1,7 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
 using BrokerApp.Api.Features.Actions;
+using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
 using BrokerApp.Api.Features.Loans;
 using Microsoft.EntityFrameworkCore;
@@ -108,6 +109,42 @@ public sealed class LoanServiceTests
                 null)));
     }
 
+    [Fact]
+    public async Task UpdateLoanAsync_UpdatesLoanAndWritesAudit()
+    {
+        var today = new DateOnly(2026, 7, 17);
+        await using var dbContext = CreateDbContext();
+        await DashboardTestData.SeedAsync(dbContext, today);
+        var service = CreateService(dbContext, today);
+
+        var loan = await service.UpdateLoanAsync("LN-TEST", new UpdateLoanRequest(
+            "Refinance",
+            "Clear to close",
+            "On Hold",
+            510000,
+            today.AddDays(20)));
+
+        Assert.NotNull(loan);
+        Assert.Equal("Refinance", loan.Type);
+        Assert.Equal("Clear to close", loan.Stage);
+        Assert.Equal("On Hold", loan.Status);
+        Assert.Equal(510000, loan.Amount);
+        Assert.Contains(dbContext.AuditEvents, item => item.EntityId == "LN-TEST"
+            && item.Operation == AuditOperations.Updated);
+    }
+
+    [Fact]
+    public async Task UpdateLoanAsync_RejectsInvalidStatus()
+    {
+        var today = new DateOnly(2026, 7, 17);
+        await using var dbContext = CreateDbContext();
+        await DashboardTestData.SeedAsync(dbContext, today);
+        var service = CreateService(dbContext, today);
+
+        await Assert.ThrowsAsync<LoanValidationException>(
+            () => service.UpdateLoanAsync("LN-TEST", new UpdateLoanRequest("Purchase", "Processing", "Invalid", null, null)));
+    }
+
     private static BrokerAppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<BrokerAppDbContext>()
@@ -119,6 +156,11 @@ public sealed class LoanServiceTests
 
     private static LoanService CreateService(BrokerAppDbContext dbContext, DateOnly today)
     {
-        return new LoanService(dbContext, new FixedClock(today), new ActionPublicIdGenerator(dbContext));
+        var clock = new FixedClock(today);
+        return new LoanService(
+            dbContext,
+            clock,
+            new ActionPublicIdGenerator(dbContext),
+            new AuditWriter(dbContext, clock));
     }
 }

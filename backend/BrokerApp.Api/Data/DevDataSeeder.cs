@@ -90,6 +90,32 @@ public static class DevDataSeeder
             });
         }
 
+        if (!await dbContext.Users.AnyAsync(user => user.Id == DevDataIds.BackupLoanOfficerId))
+        {
+            dbContext.Users.Add(new AppUser
+            {
+                Id = DevDataIds.BackupLoanOfficerId,
+                OrganizationId = DevDataIds.OrganizationId,
+                DisplayName = "Backup Loan Officer",
+                Email = "backup.officer@example.local",
+                Role = UserRoles.LoanOfficer,
+                CreatedAtUtc = now
+            });
+        }
+
+        if (!await dbContext.Users.AnyAsync(user => user.Id == DevDataIds.TeamLeadId))
+        {
+            dbContext.Users.Add(new AppUser
+            {
+                Id = DevDataIds.TeamLeadId,
+                OrganizationId = DevDataIds.OrganizationId,
+                DisplayName = "Demo Team Lead",
+                Email = "team.lead@example.local",
+                Role = UserRoles.TeamLead,
+                CreatedAtUtc = now
+            });
+        }
+
         foreach (var demoTemplate in DemoTemplates)
         {
             var templateId = Guid.Parse(demoTemplate.Id);

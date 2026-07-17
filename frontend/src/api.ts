@@ -35,6 +35,7 @@ export type LoanDetail = {
   type: string
   stage: string
   status: string
+  amount: number | null
   targetCloseDate: string | null
   actions: LoanActionDetail[]
   notes: LoanNote[]
@@ -49,6 +50,8 @@ export type LoanActionDetail = {
   priority: string
   dueDate: string
   completedAtUtc: string | null
+  assignedUserId: string | null
+  assignedUserName: string | null
 }
 
 export type LoanNote = {
@@ -79,6 +82,8 @@ export type CustomerListItem = {
 
 export type CustomerDetail = {
   id: string
+  firstName: string
+  lastName: string
   borrowerName: string
   email: string | null
   phone: string | null
@@ -195,6 +200,22 @@ export type CreateLoanActionResponse = {
   dueDate: string
 }
 
+export type UpdateCustomerRequest = {
+  firstName: string
+  lastName: string
+  email: string | null
+  phone: string | null
+  status: string
+}
+
+export type UpdateLoanRequest = {
+  type: string
+  stage: string
+  status: string
+  amount: number | null
+  targetCloseDate: string | null
+}
+
 export type ActionTemplateListItem = {
   id: string
   name: string
@@ -202,6 +223,14 @@ export type ActionTemplateListItem = {
   stage: string
   isActive: boolean
   itemCount: number
+}
+
+export type UserListItem = {
+  id: string
+  displayName: string
+  email: string
+  role: string
+  isActive: boolean
 }
 
 export type ActionTemplateDetail = {
@@ -317,6 +346,10 @@ export function getCustomer(id: string) {
   return getJson<CustomerDetail>(`/api/v1/customers/${encodeURIComponent(id)}`)
 }
 
+export function updateCustomer(id: string, request: UpdateCustomerRequest) {
+  return putJson<CustomerDetail>(`/api/v1/customers/${encodeURIComponent(id)}`, request)
+}
+
 export function getReportSummary() {
   return getJson<ReportSummary>('/api/v1/reports/summary')
 }
@@ -325,8 +358,16 @@ export function getActionTemplates() {
   return getJson<ActionTemplateListItem[]>('/api/v1/action-templates')
 }
 
+export function getUsers() {
+  return getJson<UserListItem[]>('/api/v1/users')
+}
+
 export function getActionTemplate(id: string) {
   return getJson<ActionTemplateDetail>(`/api/v1/action-templates/${encodeURIComponent(id)}`)
+}
+
+export function updateLoan(loanNumber: string, request: UpdateLoanRequest) {
+  return putJson<LoanDetail>(`/api/v1/loans/${encodeURIComponent(loanNumber)}`, request)
 }
 
 export function createActionTemplate(request: UpsertActionTemplateRequest) {
@@ -367,5 +408,18 @@ export function rescheduleAction(publicId: string, dueDate: string, reason: stri
 export function addActionComment(publicId: string, body: string) {
   return postJson(`/api/v1/actions/${encodeURIComponent(publicId)}/comments`, {
     body,
+  })
+}
+
+export function cancelAction(publicId: string, reason: string) {
+  return postJson(`/api/v1/actions/${encodeURIComponent(publicId)}/cancel`, {
+    reason,
+  })
+}
+
+export function reassignAction(publicId: string, assignedUserId: string, reason: string) {
+  return postJson(`/api/v1/actions/${encodeURIComponent(publicId)}/reassign`, {
+    assignedUserId,
+    reason,
   })
 }

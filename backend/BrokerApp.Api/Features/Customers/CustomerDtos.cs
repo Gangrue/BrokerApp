@@ -13,6 +13,8 @@ public sealed record CustomerListItemDto(
 
 public sealed record CustomerDetailDto(
     Guid Id,
+    string FirstName,
+    string LastName,
     string BorrowerName,
     string? Email,
     string? Phone,
@@ -37,3 +39,10 @@ public sealed record CustomerActionDto(
     string Section,
     string Priority,
     DateOnly DueDate);
+
+public sealed record UpdateCustomerRequest(
+    string FirstName,
+    string LastName,
+    string? Email,
+    string? Phone,
+    string Status);

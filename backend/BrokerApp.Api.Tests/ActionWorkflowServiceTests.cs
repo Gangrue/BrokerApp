@@ -1,6 +1,7 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
 using BrokerApp.Api.Features.Actions;
+using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,7 +16,7 @@ public sealed class ActionWorkflowServiceTests
         await using var dbContext = CreateDbContext();
         await DashboardTestData.SeedAsync(dbContext, today);
         var clock = new FixedClock(today);
-        var workflowService = new ActionWorkflowService(dbContext, clock);
+        var workflowService = CreateService(dbContext, clock);
 
         var result = await workflowService.CompleteAsync("ACT-OVERDUE", new CompleteActionRequest("Borrower sent documents."));
         var dashboard = await new DashboardService(dbContext, clock).GetSummaryAsync();
@@ -25,6 +26,7 @@ public sealed class ActionWorkflowServiceTests
         Assert.Equal(ActionWorkflowStatuses.Completed, result.WorkflowStatus);
         Assert.DoesNotContain(dashboard.OpenActions, item => item.Id == "ACT-OVERDUE");
         Assert.Contains(action.Events, item => item.EventType == ActionEventTypes.Completed);
+        Assert.Contains(dbContext.AuditEvents, item => item.EntityId == "ACT-OVERDUE" && item.Operation == AuditOperations.Completed);
     }
 
     [Fact]
@@ -34,7 +36,7 @@ public sealed class ActionWorkflowServiceTests
         await using var dbContext = CreateDbContext();
         await DashboardTestData.SeedAsync(dbContext, today);
         var clock = new FixedClock(today);
-        var workflowService = new ActionWorkflowService(dbContext, clock);
+        var workflowService = CreateService(dbContext, clock);
 
         var result = await workflowService.RescheduleAsync(
             "ACT-TODAY",
@@ -54,7 +56,7 @@ public sealed class ActionWorkflowServiceTests
         var today = new DateOnly(2026, 7, 17);
         await using var dbContext = CreateDbContext();
         await DashboardTestData.SeedAsync(dbContext, today);
-        var workflowService = new ActionWorkflowService(dbContext, new FixedClock(today));
+        var workflowService = CreateService(dbContext, new FixedClock(today));
 
         await workflowService.AddCommentAsync("ACT-TODAY", new AddActionCommentRequest("Called title and confirmed ETA."));
 
@@ -66,6 +68,54 @@ public sealed class ActionWorkflowServiceTests
         Assert.Contains(action.Events, item => item.EventType == ActionEventTypes.CommentAdded);
     }
 
+    [Fact]
+    public async Task CancelAsync_CancelsActionAndRemovesItFromDashboard()
+    {
+        var today = new DateOnly(2026, 7, 17);
+        await using var dbContext = CreateDbContext();
+        await DashboardTestData.SeedAsync(dbContext, today);
+        var clock = new FixedClock(today);
+        var workflowService = CreateService(dbContext, clock);
+
+        var result = await workflowService.CancelAsync("ACT-TODAY", new CancelActionRequest("Condition no longer applies."));
+        var dashboard = await new DashboardService(dbContext, clock).GetSummaryAsync();
+
+        Assert.NotNull(result);
+        Assert.Equal(ActionWorkflowStatuses.Cancelled, result.WorkflowStatus);
+        Assert.DoesNotContain(dashboard.OpenActions, item => item.Id == "ACT-TODAY");
+        Assert.Contains(dbContext.ActionEvents, item => item.EventType == ActionEventTypes.Cancelled);
+        Assert.Contains(dbContext.AuditEvents, item => item.EntityId == "ACT-TODAY" && item.Operation == AuditOperations.Cancelled);
+    }
+
+    [Fact]
+    public async Task ReassignAsync_UpdatesAssignedUserAndWritesHistory()
+    {
+        var today = new DateOnly(2026, 7, 17);
+        await using var dbContext = CreateDbContext();
+        await DashboardTestData.SeedAsync(dbContext, today);
+        dbContext.Users.Add(new AppUser
+        {
+            Id = DevDataIds.BackupLoanOfficerId,
+            OrganizationId = DevDataIds.OrganizationId,
+            DisplayName = "Backup Loan Officer",
+            Email = "backup.officer@example.local",
+            Role = UserRoles.LoanOfficer,
+            CreatedAtUtc = new FixedClock(today).UtcNow
+        });
+        await dbContext.SaveChangesAsync();
+        var workflowService = CreateService(dbContext, new FixedClock(today));
+
+        var result = await workflowService.ReassignAsync(
+            "ACT-TODAY",
+            new ReassignActionRequest(DevDataIds.BackupLoanOfficerId, "Backup is covering this file."));
+
+        Assert.NotNull(result);
+        Assert.Equal(DevDataIds.BackupLoanOfficerId, result.AssignedUserId);
+        Assert.Equal("Backup Loan Officer", result.AssignedUserName);
+        Assert.Contains(dbContext.ActionEvents, item => item.EventType == ActionEventTypes.Reassigned);
+        Assert.Contains(dbContext.AuditEvents, item => item.EntityId == "ACT-TODAY" && item.Operation == AuditOperations.Reassigned);
+    }
+
     private static BrokerAppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<BrokerAppDbContext>()
@@ -73,5 +123,10 @@ public sealed class ActionWorkflowServiceTests
             .Options;
 
         return new BrokerAppDbContext(options);
+    }
+
+    private static ActionWorkflowService CreateService(BrokerAppDbContext dbContext, FixedClock clock)
+    {
+        return new ActionWorkflowService(dbContext, clock, new AuditWriter(dbContext, clock));
     }
 }

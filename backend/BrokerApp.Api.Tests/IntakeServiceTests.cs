@@ -2,6 +2,7 @@ using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
 using BrokerApp.Api.Features.Actions;
 using BrokerApp.Api.Features.ActionTemplates;
+using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
 using BrokerApp.Api.Features.Intake;
 using Microsoft.EntityFrameworkCore;
@@ -186,11 +187,18 @@ public sealed class IntakeServiceTests
             dbContext,
             new FixedClock(today),
             new ActionPublicIdGenerator(dbContext),
-            CreateTemplateService(dbContext, today));
+            CreateTemplateService(dbContext, today),
+            CreateAuditWriter(dbContext, today));
     }
 
     private static ActionTemplateService CreateTemplateService(BrokerAppDbContext dbContext, DateOnly today)
     {
-        return new ActionTemplateService(dbContext, new FixedClock(today), new ActionPublicIdGenerator(dbContext));
+        var clock = new FixedClock(today);
+        return new ActionTemplateService(dbContext, clock, new ActionPublicIdGenerator(dbContext), new AuditWriter(dbContext, clock));
+    }
+
+    private static AuditWriter CreateAuditWriter(BrokerAppDbContext dbContext, DateOnly today)
+    {
+        return new AuditWriter(dbContext, new FixedClock(today));
     }
 }

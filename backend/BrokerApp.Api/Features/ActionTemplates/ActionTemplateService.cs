@@ -1,6 +1,7 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
 using BrokerApp.Api.Features.Actions;
+using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,15 +30,18 @@ public sealed class ActionTemplateService : IActionTemplateService
     private readonly BrokerAppDbContext _dbContext;
     private readonly ISystemClock _clock;
     private readonly IActionPublicIdGenerator _actionPublicIdGenerator;
+    private readonly IAuditWriter _auditWriter;
 
     public ActionTemplateService(
         BrokerAppDbContext dbContext,
         ISystemClock clock,
-        IActionPublicIdGenerator actionPublicIdGenerator)
+        IActionPublicIdGenerator actionPublicIdGenerator,
+        IAuditWriter auditWriter)
     {
         _dbContext = dbContext;
         _clock = clock;
         _actionPublicIdGenerator = actionPublicIdGenerator;
+        _auditWriter = auditWriter;
     }
 
     public async Task<IReadOnlyCollection<ActionTemplateListItemDto>> GetTemplatesAsync(CancellationToken cancellationToken = default)
@@ -95,6 +99,11 @@ public sealed class ActionTemplateService : IActionTemplateService
         }
 
         _dbContext.ActionTemplates.Add(template);
+        _auditWriter.Record(
+            "ActionTemplate",
+            template.Id.ToString(),
+            AuditOperations.Created,
+            $"Template {template.Name} created with {template.Items.Count} items.");
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return ToDetailDto(template);
@@ -128,6 +137,11 @@ public sealed class ActionTemplateService : IActionTemplateService
         {
             _dbContext.ActionTemplateItems.Add(CreateItem(template.Id, item));
         }
+        _auditWriter.Record(
+            "ActionTemplate",
+            template.Id.ToString(),
+            AuditOperations.Updated,
+            $"Template {template.Name} updated with {input.Items.Count} items.");
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -253,6 +267,11 @@ public sealed class ActionTemplateService : IActionTemplateService
                 OccurredAtUtc = now
             });
             createdActionIds.Add(action.PublicId);
+            _auditWriter.Record(
+                "LoanAction",
+                action.PublicId,
+                AuditOperations.Generated,
+                $"Generated from template {template.Name} for loan {loan.LoanNumber}.");
         }
 
         return new GenerateLoanActionsResponse(loan.LoanNumber, template.Id, createdActionIds, skippedCount);

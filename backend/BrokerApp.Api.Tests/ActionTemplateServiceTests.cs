@@ -2,6 +2,7 @@ using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
 using BrokerApp.Api.Features.Actions;
 using BrokerApp.Api.Features.ActionTemplates;
+using BrokerApp.Api.Features.Audit;
 using Microsoft.EntityFrameworkCore;
 
 namespace BrokerApp.Api.Tests;
@@ -156,6 +157,7 @@ public sealed class ActionTemplateServiceTests
 
     private static ActionTemplateService CreateService(BrokerAppDbContext dbContext, DateOnly today)
     {
-        return new ActionTemplateService(dbContext, new FixedClock(today), new ActionPublicIdGenerator(dbContext));
+        var clock = new FixedClock(today);
+        return new ActionTemplateService(dbContext, clock, new ActionPublicIdGenerator(dbContext), new AuditWriter(dbContext, clock));
     }
 }

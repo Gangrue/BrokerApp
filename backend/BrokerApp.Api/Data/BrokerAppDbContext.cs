@@ -29,6 +29,7 @@ public sealed class BrokerAppDbContext : DbContext
     public DbSet<LoanNote> LoanNotes => Set<LoanNote>();
     public DbSet<ActionTemplate> ActionTemplates => Set<ActionTemplate>();
     public DbSet<ActionTemplateItem> ActionTemplateItems => Set<ActionTemplateItem>();
+    public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -219,6 +220,24 @@ public sealed class BrokerAppDbContext : DbContext
             entity.HasOne(e => e.CreatedByUser)
                 .WithMany()
                 .HasForeignKey(e => e.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AuditEvent>(entity =>
+        {
+            entity.Property(e => e.EntityType).HasMaxLength(80).IsRequired();
+            entity.Property(e => e.EntityId).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Operation).HasMaxLength(80).IsRequired();
+            entity.Property(e => e.ChangedFields).HasMaxLength(4000).IsRequired();
+            entity.HasIndex(e => new { e.OrganizationId, e.EntityType, e.EntityId, e.OccurredAtUtc });
+            entity.HasIndex(e => new { e.OrganizationId, e.OccurredAtUtc });
+            entity.HasOne(e => e.Organization)
+                .WithMany(e => e.AuditEvents)
+                .HasForeignKey(e => e.OrganizationId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.ActorUser)
+                .WithMany()
+                .HasForeignKey(e => e.ActorUserId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }

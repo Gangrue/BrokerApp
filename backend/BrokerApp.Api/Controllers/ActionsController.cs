@@ -60,4 +60,40 @@ public sealed class ActionsController : ControllerBase
             return BadRequest(new { message = exception.Message });
         }
     }
+
+    [HttpPost("{publicId}/cancel")]
+    public async Task<ActionResult<ActionWorkflowResultDto>> Cancel(
+        string publicId,
+        CancelActionRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _actionWorkflowService.CancelAsync(publicId, request, cancellationToken);
+
+            return result is null ? NotFound() : Ok(result);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
+    [HttpPost("{publicId}/reassign")]
+    public async Task<ActionResult<ActionWorkflowResultDto>> Reassign(
+        string publicId,
+        ReassignActionRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _actionWorkflowService.ReassignAsync(publicId, request, cancellationToken);
+
+            return result is null ? NotFound() : Ok(result);
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
 }

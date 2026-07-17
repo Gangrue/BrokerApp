@@ -26,9 +26,23 @@ public static class ActionEventTypes
     public const string Rescheduled = "Rescheduled";
     public const string CommentAdded = "Comment Added";
     public const string Created = "Created";
+    public const string Cancelled = "Cancelled";
+    public const string Reassigned = "Reassigned";
 }
 
 public static class UserRoles
 {
     public const string LoanOfficer = "Loan Officer";
+    public const string TeamLead = "Team Lead";
+}
+
+public static class AuditOperations
+{
+    public const string Created = "Created";
+    public const string Updated = "Updated";
+    public const string Completed = "Completed";
+    public const string Cancelled = "Cancelled";
+    public const string Reassigned = "Reassigned";
+    public const string CommentAdded = "Comment Added";
+    public const string Generated = "Generated";
 }

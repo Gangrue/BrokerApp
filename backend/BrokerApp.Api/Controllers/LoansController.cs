@@ -31,6 +31,24 @@ public sealed class LoansController : ControllerBase
         return loan is null ? NotFound() : Ok(loan);
     }
 
+    [HttpPut("{loanNumber}")]
+    public async Task<ActionResult<LoanDetailDto>> UpdateLoan(
+        string loanNumber,
+        UpdateLoanRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var loan = await _loanService.UpdateLoanAsync(loanNumber, request, cancellationToken);
+
+            return loan is null ? NotFound() : Ok(loan);
+        }
+        catch (LoanValidationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
     [HttpPost("{loanNumber}/actions")]
     public async Task<ActionResult<CreateLoanActionResponse>> CreateAction(
         string loanNumber,

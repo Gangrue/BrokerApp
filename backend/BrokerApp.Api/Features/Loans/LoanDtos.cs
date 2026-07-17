@@ -18,6 +18,7 @@ public sealed record LoanDetailDto(
     string Type,
     string Stage,
     string Status,
+    decimal? Amount,
     DateOnly? TargetCloseDate,
     IReadOnlyCollection<LoanActionDetailDto> Actions,
     IReadOnlyCollection<LoanNoteDto> Notes,
@@ -30,7 +31,9 @@ public sealed record LoanActionDetailDto(
     string WorkflowStatus,
     string Priority,
     DateOnly DueDate,
-    DateTimeOffset? CompletedAtUtc);
+    DateTimeOffset? CompletedAtUtc,
+    Guid? AssignedUserId,
+    string? AssignedUserName);
 
 public sealed record LoanNoteDto(
     string Body,
@@ -59,3 +62,10 @@ public sealed record CreateLoanActionResponse(
     string Section,
     string Priority,
     DateOnly DueDate);
+
+public sealed record UpdateLoanRequest(
+    string Type,
+    string Stage,
+    string Status,
+    decimal? Amount,
+    DateOnly? TargetCloseDate);

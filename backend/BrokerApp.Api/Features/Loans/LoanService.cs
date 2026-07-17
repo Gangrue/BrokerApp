@@ -1,6 +1,7 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
 using BrokerApp.Api.Features.Actions;
+using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,6 +15,10 @@ public interface ILoanService
         string loanNumber,
         CreateLoanActionRequest request,
         CancellationToken cancellationToken = default);
+    Task<LoanDetailDto?> UpdateLoanAsync(
+        string loanNumber,
+        UpdateLoanRequest request,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class LoanService : ILoanService
@@ -21,15 +26,18 @@ public sealed class LoanService : ILoanService
     private readonly BrokerAppDbContext _dbContext;
     private readonly ISystemClock _clock;
     private readonly IActionPublicIdGenerator _actionPublicIdGenerator;
+    private readonly IAuditWriter _auditWriter;
 
     public LoanService(
         BrokerAppDbContext dbContext,
         ISystemClock clock,
-        IActionPublicIdGenerator actionPublicIdGenerator)
+        IActionPublicIdGenerator actionPublicIdGenerator,
+        IAuditWriter auditWriter)
     {
         _dbContext = dbContext;
         _clock = clock;
         _actionPublicIdGenerator = actionPublicIdGenerator;
+        _auditWriter = auditWriter;
     }
 
     public async Task<IReadOnlyCollection<LoanListItemDto>> GetLoansAsync(CancellationToken cancellationToken = default)
@@ -71,6 +79,8 @@ public sealed class LoanService : ILoanService
             .AsSplitQuery()
             .Include(loan => loan.Customer)
             .Include(loan => loan.Actions)
+                .ThenInclude(action => action.AssignedUser)
+            .Include(loan => loan.Actions)
                 .ThenInclude(action => action.Events)
             .Include(loan => loan.Notes)
             .SingleOrDefaultAsync(
@@ -92,7 +102,9 @@ public sealed class LoanService : ILoanService
                 action.WorkflowStatus,
                 action.Priority,
                 action.DueDate,
-                action.CompletedAtUtc))
+                action.CompletedAtUtc,
+                action.AssignedUserId,
+                action.AssignedUser?.DisplayName))
             .ToArray();
 
         var notes = loan.Notes
@@ -119,10 +131,55 @@ public sealed class LoanService : ILoanService
             loan.Type,
             loan.Stage,
             loan.Status,
+            loan.Amount,
             loan.TargetCloseDate,
             actions,
             notes,
             history);
+    }
+
+    public async Task<LoanDetailDto?> UpdateLoanAsync(
+        string loanNumber,
+        UpdateLoanRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var input = ValidateLoanUpdate(request);
+        var normalizedLoanNumber = Require(loanNumber, "Loan number");
+        var loan = await _dbContext.Loans.SingleOrDefaultAsync(
+            item => item.OrganizationId == DevDataIds.OrganizationId && item.LoanNumber == normalizedLoanNumber,
+            cancellationToken);
+
+        if (loan is null)
+        {
+            return null;
+        }
+
+        var changedFields = new List<string>();
+        AddChange(changedFields, nameof(loan.Type), loan.Type, input.Type);
+        AddChange(changedFields, nameof(loan.Stage), loan.Stage, input.Stage);
+        AddChange(changedFields, nameof(loan.Status), loan.Status, input.Status);
+        AddChange(changedFields, nameof(loan.Amount), loan.Amount?.ToString() ?? string.Empty, input.Amount?.ToString() ?? string.Empty);
+        AddChange(changedFields, nameof(loan.TargetCloseDate), loan.TargetCloseDate?.ToString("O") ?? string.Empty, input.TargetCloseDate?.ToString("O") ?? string.Empty);
+
+        loan.Type = input.Type;
+        loan.Stage = input.Stage;
+        loan.Status = input.Status;
+        loan.Amount = input.Amount;
+        loan.TargetCloseDate = input.TargetCloseDate;
+        loan.UpdatedAtUtc = _clock.UtcNow;
+
+        if (changedFields.Count > 0)
+        {
+            _auditWriter.Record(
+                "Loan",
+                loan.LoanNumber,
+                AuditOperations.Updated,
+                string.Join("; ", changedFields));
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return await GetLoanAsync(loan.LoanNumber, cancellationToken);
     }
 
     public async Task<CreateLoanActionResponse?> CreateActionAsync(
@@ -173,6 +230,11 @@ public sealed class LoanService : ILoanService
             Reason = "Created from loan workspace.",
             OccurredAtUtc = now
         });
+        _auditWriter.Record(
+            "LoanAction",
+            action.PublicId,
+            AuditOperations.Created,
+            $"Manual follow-up created for loan {loan.LoanNumber}.");
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -226,6 +288,36 @@ public sealed class LoanService : ILoanService
             NormalizeOptional(request.Description));
     }
 
+    private static ValidLoanUpdate ValidateLoanUpdate(UpdateLoanRequest? request)
+    {
+        if (request is null)
+        {
+            throw new LoanValidationException("Loan information is required.");
+        }
+
+        var status = Require(request.Status, "Loan status");
+
+        if (status is not ("Draft" or "Active" or "On Hold" or "Closed" or "Canceled"))
+        {
+            throw new LoanValidationException("Loan status is invalid.");
+        }
+
+        return new ValidLoanUpdate(
+            Require(request.Type, "Loan type"),
+            Require(request.Stage, "Loan stage"),
+            status,
+            request.Amount,
+            request.TargetCloseDate);
+    }
+
+    private static void AddChange(List<string> changes, string field, string oldValue, string newValue)
+    {
+        if (oldValue != newValue)
+        {
+            changes.Add($"{field}: {oldValue} -> {newValue}");
+        }
+    }
+
     private static string Require(string? value, string name)
     {
         var trimmed = NormalizeOptional(value);
@@ -251,4 +343,11 @@ public sealed class LoanService : ILoanService
         string Priority,
         DateOnly DueDate,
         string? Description);
+
+    private sealed record ValidLoanUpdate(
+        string Type,
+        string Stage,
+        string Status,
+        decimal? Amount,
+        DateOnly? TargetCloseDate);
 }

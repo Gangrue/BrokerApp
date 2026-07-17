@@ -2,6 +2,7 @@ using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
 using BrokerApp.Api.Features.Actions;
 using BrokerApp.Api.Features.ActionTemplates;
+using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,17 +21,20 @@ public sealed class IntakeService : IIntakeService
     private readonly ISystemClock _clock;
     private readonly IActionPublicIdGenerator _actionPublicIdGenerator;
     private readonly IActionTemplateService _actionTemplateService;
+    private readonly IAuditWriter _auditWriter;
 
     public IntakeService(
         BrokerAppDbContext dbContext,
         ISystemClock clock,
         IActionPublicIdGenerator actionPublicIdGenerator,
-        IActionTemplateService actionTemplateService)
+        IActionTemplateService actionTemplateService,
+        IAuditWriter auditWriter)
     {
         _dbContext = dbContext;
         _clock = clock;
         _actionPublicIdGenerator = actionPublicIdGenerator;
         _actionTemplateService = actionTemplateService;
+        _auditWriter = auditWriter;
     }
 
     public async Task<CreateFileIntakeResponse> CreateFileAsync(
@@ -75,6 +79,11 @@ public sealed class IntakeService : IIntakeService
                 UpdatedAtUtc = now
             };
             _dbContext.Customers.Add(customer);
+            _auditWriter.Record(
+                "Customer",
+                customer.Id.ToString(),
+                AuditOperations.Created,
+                $"Customer {customer.LastName}, {customer.FirstName} created during intake.");
         }
 
         var loan = new Loan
@@ -93,6 +102,11 @@ public sealed class IntakeService : IIntakeService
             UpdatedAtUtc = now
         };
         _dbContext.Loans.Add(loan);
+        _auditWriter.Record(
+            "Loan",
+            loan.LoanNumber,
+            AuditOperations.Created,
+            $"Loan {loan.LoanNumber} created during intake.");
 
         var createdActionIds = new List<string>();
         var actionIds = await _actionPublicIdGenerator.GenerateAsync(actionInputs.Count, cancellationToken);
@@ -125,6 +139,11 @@ public sealed class IntakeService : IIntakeService
                 Reason = "Created during intake.",
                 OccurredAtUtc = now
             });
+            _auditWriter.Record(
+                "LoanAction",
+                action.PublicId,
+                AuditOperations.Created,
+                $"Initial action created during intake for loan {loan.LoanNumber}.");
             createdActionIds.Add(action.PublicId);
         }
 
@@ -151,6 +170,7 @@ public sealed class IntakeService : IIntakeService
                 Body = initialNote,
                 CreatedAtUtc = now
             });
+            _auditWriter.Record("Loan", loan.LoanNumber, AuditOperations.CommentAdded, "Initial intake note added.");
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);

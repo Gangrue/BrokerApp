@@ -414,7 +414,9 @@ select {
   margin-bottom: 16px;
 }
 
-.reschedule-box {
+.reschedule-box,
+.reassign-box,
+.cancel-box {
   display: grid;
   gap: 8px;
   margin-bottom: 16px;
@@ -461,11 +463,43 @@ select {
   margin-bottom: 16px;
 }
 
+.edit-box {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5ecef;
+}
+
+.edit-box h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.edit-box p {
+  margin: 3px 0 0;
+  color: #687680;
+  font-size: 13px;
+}
+
 .reschedule-box label,
+.reassign-box label,
+.cancel-box label,
 .note-box label {
   color: #40505a;
   font-size: 13px;
   font-weight: 700;
+}
+
+.secondary.danger {
+  border-color: #f0c8c1;
+  background: #fff4f2;
+  color: #9f2d20;
+}
+
+.secondary.danger:hover {
+  border-color: #d98f81;
+  background: #ffe8e3;
 }
 
 .reschedule-controls {
