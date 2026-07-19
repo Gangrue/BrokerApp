@@ -3991,7 +3991,7 @@ function AuthShell({
           <form onSubmit={onSubmitResetPassword}>
             <div>
               <h2>Choose new password</h2>
-              <p>Use the reset link values and a new secure password.</p>
+              <p>Enter your account email and a new secure password.</p>
             </div>
             <label>
               Email
@@ -4000,14 +4000,6 @@ function AuthShell({
                 onChange={(event) => onResetPasswordChange((current) => ({ ...current, email: event.target.value }))}
                 type="email"
                 value={resetPasswordForm.email}
-              />
-            </label>
-            <label>
-              Reset token
-              <textarea
-                onChange={(event) => onResetPasswordChange((current) => ({ ...current, token: event.target.value }))}
-                rows={3}
-                value={resetPasswordForm.token}
               />
             </label>
             <label>
