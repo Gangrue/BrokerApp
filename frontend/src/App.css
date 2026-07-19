@@ -551,7 +551,10 @@ nav button:disabled:hover {
 }
 
 .workspace {
+  display: flex;
+  flex-direction: column;
   padding: 28px;
+  min-height: 100vh;
   min-width: 0;
   background:
     radial-gradient(circle at 18px 18px, rgba(75, 80, 69, 0.72) 1px, transparent 1.8px),
@@ -881,24 +884,15 @@ nav button:disabled:hover {
   font-size: 12px;
 }
 
-.home-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.8fr);
-  gap: 16px;
-  align-items: start;
-}
-
 .home-panel {
   overflow: hidden;
 }
 
-.home-progress-list,
 .home-action-list {
   display: grid;
   gap: 10px;
 }
 
-.home-progress-list p,
 .home-action-list button {
   display: grid;
   gap: 4px;
@@ -912,7 +906,6 @@ nav button:disabled:hover {
   text-align: left;
 }
 
-.home-progress-list span,
 .home-action-list small {
   color: var(--muted-foreground);
   font-size: 13px;
@@ -1420,14 +1413,22 @@ select {
 }
 
 .workflow-toast {
-  position: sticky;
-  top: 0;
-  z-index: 12;
+  position: fixed;
+  top: 16px;
+  right: 28px;
+  left: 288px;
+  z-index: 1000;
   display: block;
-  width: 100%;
+  width: auto;
+  margin-bottom: 0;
   text-align: left;
   cursor: pointer;
+  box-shadow: 0 14px 32px rgba(31, 41, 45, 0.16);
   transition: opacity 2s ease, transform 2s ease;
+}
+
+.sidebar-collapsed .workflow-toast {
+  left: 102px;
 }
 
 .workflow-toast:hover,
@@ -1495,13 +1496,45 @@ select {
 }
 
 .detail-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
   padding-bottom: 15px;
   border-bottom: 1px solid #e5ecef;
+}
+
+.detail-header > div {
+  min-width: 0;
 }
 
 .detail-header h2 {
   margin-top: 10px;
   font-size: 22px;
+}
+
+.detail-panel-close {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  box-shadow: none;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.detail-panel-close:hover {
+  border-color: color-mix(in srgb, var(--color-danger-text) 28%, var(--color-border));
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+  box-shadow: 0 5px 12px rgba(31, 41, 45, 0.08);
+  transform: translateY(-1px);
 }
 
 .detail-primary-actions {
@@ -2238,40 +2271,6 @@ select {
   gap: 16px;
 }
 
-.report-metrics {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.report-metric {
-  padding: 16px;
-  border: 1px solid #d7e0e5;
-  border-radius: 8px;
-  background: var(--color-surface);
-  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
-}
-
-.report-metric:hover {
-  border-color: color-mix(in srgb, var(--color-info-text) 35%, var(--color-border));
-  box-shadow: 0 6px 18px rgba(23, 36, 44, 0.07);
-  transform: translateY(-1px);
-}
-
-.report-metric span {
-  display: block;
-  min-height: 34px;
-  color: var(--color-text-muted);
-  font-size: 13px;
-}
-
-.report-metric strong {
-  display: block;
-  margin-top: 8px;
-  font-size: 30px;
-  line-height: 1;
-}
-
 .report-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2321,7 +2320,7 @@ select {
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px 14px;
-  margin-top: 24px;
+  margin-top: auto;
   padding: 18px 0 4px;
   border-top: 1px solid color-mix(in srgb, var(--workspace-foreground) 18%, transparent);
 }
@@ -2384,6 +2383,75 @@ select {
 
 .report-panel {
   min-width: 0;
+}
+
+.report-accordion-panel {
+  display: grid;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.report-accordion-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+  border: 0;
+  border-radius: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: none;
+  text-align: left;
+}
+
+.report-accordion-trigger:hover {
+  background: color-mix(in srgb, var(--color-sidebar-active) 72%, var(--color-surface));
+  box-shadow: inset 4px 0 0 var(--color-accent);
+  transform: none;
+}
+
+.report-accordion-trigger span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.report-accordion-trigger strong {
+  font-size: 17px;
+}
+
+.report-accordion-trigger small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.report-accordion-trigger em {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-primary);
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.report-accordion-panel.open .report-accordion-trigger {
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-sidebar-active) 56%, var(--color-surface));
+}
+
+.report-accordion-body {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  animation: accordionBodyIn 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .breakdown-list,
@@ -2669,6 +2737,102 @@ select {
   grid-template-columns: minmax(240px, 0.48fr) minmax(0, 1.52fr);
 }
 
+.admin-accordion-grid {
+  grid-template-columns: 1fr;
+}
+
+.admin-accordion-panel {
+  display: grid;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.admin-accordion-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+  border: 0;
+  border-radius: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: none;
+  text-align: left;
+}
+
+.admin-accordion-trigger:hover {
+  background: color-mix(in srgb, var(--color-sidebar-active) 72%, var(--color-surface));
+  box-shadow: inset 4px 0 0 var(--color-accent);
+  transform: none;
+}
+
+.admin-accordion-trigger span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-accordion-trigger strong {
+  font-size: 17px;
+}
+
+.admin-accordion-trigger small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.admin-accordion-trigger em {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-primary);
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.admin-accordion-panel.open .admin-accordion-trigger {
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-sidebar-active) 56%, var(--color-surface));
+}
+
+.admin-accordion-body {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  animation: accordionBodyIn 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.admin-template-workbench {
+  grid-template-columns: minmax(240px, 0.42fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.admin-section-block {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+@keyframes accordionBodyIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .template-list,
 .template-item-list {
   display: grid;
@@ -2759,6 +2923,12 @@ select {
 .template-items-header h3 {
   margin: 0;
   font-size: 16px;
+}
+
+.template-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
 }
 
 .template-item-card {
@@ -2979,11 +3149,9 @@ select {
   .dashboard-alert-grid,
   .content-grid,
   .home-hero,
-  .home-grid,
   .home-summary-grid,
   .loan-detail-grid,
   .loan-detail-grid.wide,
-  .report-metrics,
   .report-grid,
   .report-grid.two-panel,
   .account-grid {
@@ -3068,7 +3236,8 @@ select {
 }
 
 @media (max-width: 1240px) {
-  .admin-grid {
+  .admin-grid,
+  .admin-template-workbench {
     grid-template-columns: 1fr;
   }
 }
@@ -3143,6 +3312,13 @@ select {
     padding: 14px;
   }
 
+  .workflow-toast,
+  .sidebar-collapsed .workflow-toast {
+    top: 10px;
+    right: 14px;
+    left: 14px;
+  }
+
   .sidebar,
   .topbar,
   .topbar-actions,
@@ -3151,14 +3327,12 @@ select {
   .content-grid,
   .home-page,
   .home-hero,
-  .home-grid,
   .home-summary-grid,
   .loan-detail-page,
   .customer-detail-page,
   .action-detail-page,
   .loan-detail-grid,
   .report-grid,
-  .report-metrics,
   .account-grid,
   .admin-grid,
   .admin-users-grid,
@@ -3433,18 +3607,6 @@ select {
     width: max-content;
   }
 
-  .report-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .report-metric {
-    padding: 14px;
-  }
-
-  .report-metric strong {
-    font-size: 26px;
-  }
-
   .report-row,
   .activity-row,
   .template-row,
@@ -3552,7 +3714,6 @@ select {
     max-height: 280px;
   }
 
-  .report-metrics,
   .metrics,
   .customer-row {
     grid-template-columns: 1fr;
