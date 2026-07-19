@@ -1,5 +1,6 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
+using BrokerApp.Api.Features.Auth;
 using BrokerApp.Api.Features.Dashboard;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,11 +15,13 @@ public sealed class ReportService : IReportService
 {
     private readonly BrokerAppDbContext _dbContext;
     private readonly ISystemClock _clock;
+    private readonly ICurrentUserContext _currentUser;
 
-    public ReportService(BrokerAppDbContext dbContext, ISystemClock clock)
+    public ReportService(BrokerAppDbContext dbContext, ISystemClock clock, ICurrentUserContext currentUser)
     {
         _dbContext = dbContext;
         _clock = clock;
+        _currentUser = currentUser;
     }
 
     public async Task<ReportSummaryDto> GetSummaryAsync(CancellationToken cancellationToken = default)
@@ -29,14 +32,14 @@ public sealed class ReportService : IReportService
 
         var activeCustomerCount = await _dbContext.Customers
             .AsNoTracking()
-            .CountAsync(customer => customer.OrganizationId == DevDataIds.OrganizationId && customer.Status == "Active", cancellationToken);
+            .CountAsync(customer => customer.OrganizationId == _currentUser.OrganizationId && customer.Status == "Active", cancellationToken);
 
         var loans = await _dbContext.Loans
             .AsNoTracking()
             .AsSplitQuery()
             .Include(loan => loan.Customer)
             .Include(loan => loan.Actions)
-            .Where(loan => loan.OrganizationId == DevDataIds.OrganizationId && loan.Status == "Active")
+            .Where(loan => loan.OrganizationId == _currentUser.OrganizationId && loan.Status == "Active")
             .ToListAsync(cancellationToken);
 
         var openActions = loans
@@ -110,7 +113,7 @@ public sealed class ReportService : IReportService
         var recentActivity = await _dbContext.AuditEvents
             .AsNoTracking()
             .Include(auditEvent => auditEvent.ActorUser)
-            .Where(auditEvent => auditEvent.OrganizationId == DevDataIds.OrganizationId)
+            .Where(auditEvent => auditEvent.OrganizationId == _currentUser.OrganizationId)
             .OrderByDescending(auditEvent => auditEvent.OccurredAtUtc)
             .ThenByDescending(auditEvent => auditEvent.Id)
             .Take(12)

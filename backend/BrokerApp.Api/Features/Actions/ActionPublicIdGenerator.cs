@@ -1,4 +1,5 @@
 using BrokerApp.Api.Data;
+using BrokerApp.Api.Features.Auth;
 using Microsoft.EntityFrameworkCore;
 
 namespace BrokerApp.Api.Features.Actions;
@@ -12,10 +13,12 @@ public sealed class ActionPublicIdGenerator : IActionPublicIdGenerator
 {
     private const int FirstGeneratedActionNumber = 1001;
     private readonly BrokerAppDbContext _dbContext;
+    private readonly ICurrentUserContext _currentUser;
 
-    public ActionPublicIdGenerator(BrokerAppDbContext dbContext)
+    public ActionPublicIdGenerator(BrokerAppDbContext dbContext, ICurrentUserContext currentUser)
     {
         _dbContext = dbContext;
+        _currentUser = currentUser;
     }
 
     public async Task<IReadOnlyCollection<string>> GenerateAsync(int count, CancellationToken cancellationToken = default)
@@ -27,11 +30,11 @@ public sealed class ActionPublicIdGenerator : IActionPublicIdGenerator
 
         var publicIds = await _dbContext.LoanActions
             .AsNoTracking()
-            .Where(action => action.OrganizationId == DevDataIds.OrganizationId && action.PublicId.StartsWith("ACT-"))
+            .Where(action => action.OrganizationId == _currentUser.OrganizationId && action.PublicId.StartsWith("ACT-"))
             .Select(action => action.PublicId)
             .ToArrayAsync(cancellationToken);
         var trackedPublicIds = _dbContext.LoanActions.Local
-            .Where(action => action.OrganizationId == DevDataIds.OrganizationId && action.PublicId.StartsWith("ACT-"))
+            .Where(action => action.OrganizationId == _currentUser.OrganizationId && action.PublicId.StartsWith("ACT-"))
             .Select(action => action.PublicId);
 
         var maxActionNumber = publicIds

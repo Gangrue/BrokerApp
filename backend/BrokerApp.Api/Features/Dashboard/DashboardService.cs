@@ -1,5 +1,6 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
+using BrokerApp.Api.Features.Auth;
 using Microsoft.EntityFrameworkCore;
 
 namespace BrokerApp.Api.Features.Dashboard;
@@ -13,11 +14,13 @@ public sealed class DashboardService : IDashboardService
 {
     private readonly BrokerAppDbContext _dbContext;
     private readonly ISystemClock _clock;
+    private readonly ICurrentUserContext _currentUser;
 
-    public DashboardService(BrokerAppDbContext dbContext, ISystemClock clock)
+    public DashboardService(BrokerAppDbContext dbContext, ISystemClock clock, ICurrentUserContext currentUser)
     {
         _dbContext = dbContext;
         _clock = clock;
+        _currentUser = currentUser;
     }
 
     public async Task<DashboardSummaryDto> GetSummaryAsync(CancellationToken cancellationToken = default)
@@ -30,7 +33,7 @@ public sealed class DashboardService : IDashboardService
             .Include(action => action.Loan)
                 .ThenInclude(loan => loan.Customer)
             .Where(action =>
-                action.OrganizationId == DevDataIds.OrganizationId
+                action.OrganizationId == _currentUser.OrganizationId
                 && action.WorkflowStatus != ActionWorkflowStatuses.Completed
                 && action.WorkflowStatus != ActionWorkflowStatuses.Cancelled
                 && action.CompletedAtUtc == null)
@@ -51,7 +54,7 @@ public sealed class DashboardService : IDashboardService
             .Include(loan => loan.Customer)
             .Include(loan => loan.OwnerUser)
             .Where(loan =>
-                loan.OrganizationId == DevDataIds.OrganizationId
+                loan.OrganizationId == _currentUser.OrganizationId
                 && loan.Status == "Active")
             .ToListAsync(cancellationToken);
 

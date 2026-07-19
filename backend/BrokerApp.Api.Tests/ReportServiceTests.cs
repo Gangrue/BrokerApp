@@ -26,7 +26,7 @@ public sealed class ReportServiceTests
             CorrelationId = Guid.Parse("90000000-0000-0000-0000-000000000101")
         });
         await dbContext.SaveChangesAsync();
-        var service = new ReportService(dbContext, new FixedClock(today));
+        var service = new ReportService(dbContext, new FixedClock(today), TestCurrentUserContext.Instance);
 
         var summary = await service.GetSummaryAsync();
 
@@ -48,7 +48,7 @@ public sealed class ReportServiceTests
     public async Task GetSummaryAsync_EmptyDatabase_ReturnsEmptySummary()
     {
         await using var dbContext = CreateDbContext();
-        var service = new ReportService(dbContext, new FixedClock(new DateOnly(2026, 7, 17)));
+        var service = new ReportService(dbContext, new FixedClock(new DateOnly(2026, 7, 17)), TestCurrentUserContext.Instance);
 
         var summary = await service.GetSummaryAsync();
 

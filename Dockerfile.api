@@ -1,0 +1,19 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+COPY backend/BrokerApp.Api/BrokerApp.Api.csproj backend/BrokerApp.Api/
+RUN dotnet restore backend/BrokerApp.Api/BrokerApp.Api.csproj
+
+COPY backend/BrokerApp.Api backend/BrokerApp.Api
+RUN dotnet publish backend/BrokerApp.Api/BrokerApp.Api.csproj \
+    --configuration Release \
+    --output /app/publish \
+    /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+
+EXPOSE 10000
+
+COPY --from=build /app/publish .
+ENTRYPOINT ["sh", "-c", "ASPNETCORE_URLS=http://+:${PORT:-10000} dotnet BrokerApp.Api.dll"]

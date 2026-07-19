@@ -1,5 +1,6 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
+using BrokerApp.Api.Features.Auth;
 using BrokerApp.Api.Features.Dashboard;
 
 namespace BrokerApp.Api.Features.Audit;
@@ -19,11 +20,13 @@ public sealed class AuditWriter : IAuditWriter
 {
     private readonly BrokerAppDbContext _dbContext;
     private readonly ISystemClock _clock;
+    private readonly ICurrentUserContext _currentUser;
 
-    public AuditWriter(BrokerAppDbContext dbContext, ISystemClock clock)
+    public AuditWriter(BrokerAppDbContext dbContext, ISystemClock clock, ICurrentUserContext currentUser)
     {
         _dbContext = dbContext;
         _clock = clock;
+        _currentUser = currentUser;
     }
 
     public void Record(
@@ -37,8 +40,8 @@ public sealed class AuditWriter : IAuditWriter
         _dbContext.AuditEvents.Add(new AuditEvent
         {
             Id = Guid.NewGuid(),
-            OrganizationId = DevDataIds.OrganizationId,
-            ActorUserId = actorUserId ?? DevDataIds.LoanOfficerId,
+            OrganizationId = _currentUser.OrganizationId,
+            ActorUserId = actorUserId ?? _currentUser.UserId,
             EntityType = entityType,
             EntityId = entityId,
             Operation = operation,

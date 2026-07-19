@@ -31,7 +31,7 @@ public sealed class IntakeServiceTests
         Assert.Equal(2, dbContext.ActionEvents.Count(actionEvent => response.CreatedActionIds.Contains(
             dbContext.LoanActions.Single(action => action.Id == actionEvent.LoanActionId).PublicId)));
 
-        var dashboard = await new DashboardService(dbContext, new FixedClock(today)).GetSummaryAsync();
+        var dashboard = await new DashboardService(dbContext, new FixedClock(today), TestCurrentUserContext.Instance).GetSummaryAsync();
 
         Assert.Contains(dashboard.OpenActions, action => action.Id == "ACT-1001");
         Assert.Contains(dashboard.OpenActions, action => action.Id == "ACT-1002");
@@ -187,7 +187,8 @@ public sealed class IntakeServiceTests
             dbContext,
             new FixedClock(today),
             CreateLoanFileCreationService(dbContext, today),
-            CreateAuditWriter(dbContext, today));
+            CreateAuditWriter(dbContext, today),
+            TestCurrentUserContext.Instance);
     }
 
     private static LoanFileCreationService CreateLoanFileCreationService(BrokerAppDbContext dbContext, DateOnly today)
@@ -196,19 +197,25 @@ public sealed class IntakeServiceTests
         return new LoanFileCreationService(
             dbContext,
             clock,
-            new ActionPublicIdGenerator(dbContext),
+            new ActionPublicIdGenerator(dbContext, TestCurrentUserContext.Instance),
             CreateTemplateService(dbContext, today),
-            new AuditWriter(dbContext, clock));
+            new AuditWriter(dbContext, clock, TestCurrentUserContext.Instance),
+            TestCurrentUserContext.Instance);
     }
 
     private static ActionTemplateService CreateTemplateService(BrokerAppDbContext dbContext, DateOnly today)
     {
         var clock = new FixedClock(today);
-        return new ActionTemplateService(dbContext, clock, new ActionPublicIdGenerator(dbContext), new AuditWriter(dbContext, clock));
+        return new ActionTemplateService(
+            dbContext,
+            clock,
+            new ActionPublicIdGenerator(dbContext, TestCurrentUserContext.Instance),
+            new AuditWriter(dbContext, clock, TestCurrentUserContext.Instance),
+            TestCurrentUserContext.Instance);
     }
 
     private static AuditWriter CreateAuditWriter(BrokerAppDbContext dbContext, DateOnly today)
     {
-        return new AuditWriter(dbContext, new FixedClock(today));
+        return new AuditWriter(dbContext, new FixedClock(today), TestCurrentUserContext.Instance);
     }
 }

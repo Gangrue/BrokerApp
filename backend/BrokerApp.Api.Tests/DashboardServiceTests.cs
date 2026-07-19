@@ -12,7 +12,7 @@ public sealed class DashboardServiceTests
         var today = new DateOnly(2026, 7, 17);
         await using var dbContext = CreateDbContext();
         await DashboardTestData.SeedAsync(dbContext, today);
-        var service = new DashboardService(dbContext, new FixedClock(today));
+        var service = new DashboardService(dbContext, new FixedClock(today), TestCurrentUserContext.Instance);
 
         var summary = await service.GetSummaryAsync();
 
@@ -32,7 +32,7 @@ public sealed class DashboardServiceTests
         var today = new DateOnly(2026, 7, 17);
         await using var dbContext = CreateDbContext();
         await DashboardTestData.SeedAsync(dbContext, today);
-        var service = new DashboardService(dbContext, new FixedClock(today));
+        var service = new DashboardService(dbContext, new FixedClock(today), TestCurrentUserContext.Instance);
 
         var summary = await service.GetSummaryAsync();
 
@@ -43,7 +43,7 @@ public sealed class DashboardServiceTests
     public async Task GetSummaryAsync_EmptyDatabase_ReturnsEmptySummary()
     {
         await using var dbContext = CreateDbContext();
-        var service = new DashboardService(dbContext, new FixedClock(new DateOnly(2026, 7, 17)));
+        var service = new DashboardService(dbContext, new FixedClock(new DateOnly(2026, 7, 17)), TestCurrentUserContext.Instance);
 
         var summary = await service.GetSummaryAsync();
 

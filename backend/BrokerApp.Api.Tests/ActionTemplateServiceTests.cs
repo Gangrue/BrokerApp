@@ -158,6 +158,11 @@ public sealed class ActionTemplateServiceTests
     private static ActionTemplateService CreateService(BrokerAppDbContext dbContext, DateOnly today)
     {
         var clock = new FixedClock(today);
-        return new ActionTemplateService(dbContext, clock, new ActionPublicIdGenerator(dbContext), new AuditWriter(dbContext, clock));
+        return new ActionTemplateService(
+            dbContext,
+            clock,
+            new ActionPublicIdGenerator(dbContext, TestCurrentUserContext.Instance),
+            new AuditWriter(dbContext, clock, TestCurrentUserContext.Instance),
+            TestCurrentUserContext.Instance);
     }
 }

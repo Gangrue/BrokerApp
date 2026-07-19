@@ -49,7 +49,7 @@ public sealed class ActionWorkflowServiceTests
         var workflowService = CreateService(dbContext, clock);
 
         var result = await workflowService.CompleteAsync("ACT-OVERDUE", new CompleteActionRequest("Borrower sent documents."));
-        var dashboard = await new DashboardService(dbContext, clock).GetSummaryAsync();
+        var dashboard = await new DashboardService(dbContext, clock, TestCurrentUserContext.Instance).GetSummaryAsync();
         var action = await dbContext.LoanActions.Include(item => item.Events).SingleAsync(item => item.PublicId == "ACT-OVERDUE");
 
         Assert.NotNull(result);
@@ -71,7 +71,7 @@ public sealed class ActionWorkflowServiceTests
         var result = await workflowService.RescheduleAsync(
             "ACT-TODAY",
             new RescheduleActionRequest(today.AddDays(4), "Borrower requested more time."));
-        var dashboard = await new DashboardService(dbContext, clock).GetSummaryAsync();
+        var dashboard = await new DashboardService(dbContext, clock, TestCurrentUserContext.Instance).GetSummaryAsync();
 
         Assert.NotNull(result);
         Assert.Equal(today.AddDays(4), result.DueDate);
@@ -108,7 +108,7 @@ public sealed class ActionWorkflowServiceTests
         var workflowService = CreateService(dbContext, clock);
 
         var result = await workflowService.CancelAsync("ACT-TODAY", new CancelActionRequest("Condition no longer applies."));
-        var dashboard = await new DashboardService(dbContext, clock).GetSummaryAsync();
+        var dashboard = await new DashboardService(dbContext, clock, TestCurrentUserContext.Instance).GetSummaryAsync();
 
         Assert.NotNull(result);
         Assert.Equal(ActionWorkflowStatuses.Cancelled, result.WorkflowStatus);
@@ -157,6 +157,10 @@ public sealed class ActionWorkflowServiceTests
 
     private static ActionWorkflowService CreateService(BrokerAppDbContext dbContext, FixedClock clock)
     {
-        return new ActionWorkflowService(dbContext, clock, new AuditWriter(dbContext, clock));
+        return new ActionWorkflowService(
+            dbContext,
+            clock,
+            new AuditWriter(dbContext, clock, TestCurrentUserContext.Instance),
+            TestCurrentUserContext.Instance);
     }
 }

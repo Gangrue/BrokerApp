@@ -1,5 +1,6 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
+using BrokerApp.Api.Features.Auth;
 using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
 using Microsoft.EntityFrameworkCore;
@@ -22,12 +23,14 @@ public sealed class ActionWorkflowService : IActionWorkflowService
     private readonly BrokerAppDbContext _dbContext;
     private readonly ISystemClock _clock;
     private readonly IAuditWriter _auditWriter;
+    private readonly ICurrentUserContext _currentUser;
 
-    public ActionWorkflowService(BrokerAppDbContext dbContext, ISystemClock clock, IAuditWriter auditWriter)
+    public ActionWorkflowService(BrokerAppDbContext dbContext, ISystemClock clock, IAuditWriter auditWriter, ICurrentUserContext currentUser)
     {
         _dbContext = dbContext;
         _clock = clock;
         _auditWriter = auditWriter;
+        _currentUser = currentUser;
     }
 
     public async Task<ActionEmailDraftDto?> CreateEmailDraftAsync(
@@ -39,7 +42,7 @@ public sealed class ActionWorkflowService : IActionWorkflowService
             .Include(item => item.Loan)
                 .ThenInclude(loan => loan.Customer)
             .SingleOrDefaultAsync(
-                item => item.OrganizationId == DevDataIds.OrganizationId && item.PublicId == publicId,
+                item => item.OrganizationId == _currentUser.OrganizationId && item.PublicId == publicId,
                 cancellationToken);
 
         if (action is null)
@@ -106,7 +109,7 @@ Demo Loan Officer
                 Id = Guid.NewGuid(),
                 LoanActionId = action.Id,
                 EventType = ActionEventTypes.Completed,
-                ActorUserId = DevDataIds.LoanOfficerId,
+                ActorUserId = _currentUser.UserId,
                 Reason = string.IsNullOrWhiteSpace(request.Reason) ? "Completed from dashboard." : request.Reason.Trim(),
                 OldValue = oldStatus,
                 NewValue = ActionWorkflowStatuses.Completed,
@@ -148,7 +151,7 @@ Demo Loan Officer
             Id = Guid.NewGuid(),
             LoanActionId = action.Id,
             EventType = ActionEventTypes.Rescheduled,
-            ActorUserId = DevDataIds.LoanOfficerId,
+            ActorUserId = _currentUser.UserId,
             Reason = request.Reason.Trim(),
             OldValue = oldValue.ToString("O"),
             NewValue = request.DueDate.ToString("O"),
@@ -189,7 +192,7 @@ Demo Loan Officer
             OrganizationId = action.OrganizationId,
             LoanId = action.LoanId,
             LoanActionId = action.Id,
-            CreatedByUserId = DevDataIds.LoanOfficerId,
+            CreatedByUserId = _currentUser.UserId,
             Body = body,
             CreatedAtUtc = _clock.UtcNow
         });
@@ -198,7 +201,7 @@ Demo Loan Officer
             Id = Guid.NewGuid(),
             LoanActionId = action.Id,
             EventType = ActionEventTypes.CommentAdded,
-            ActorUserId = DevDataIds.LoanOfficerId,
+            ActorUserId = _currentUser.UserId,
             NewValue = body,
             OccurredAtUtc = _clock.UtcNow
         });
@@ -234,7 +237,7 @@ Demo Loan Officer
             Id = Guid.NewGuid(),
             LoanActionId = action.Id,
             EventType = ActionEventTypes.Cancelled,
-            ActorUserId = DevDataIds.LoanOfficerId,
+            ActorUserId = _currentUser.UserId,
             Reason = request.Reason.Trim(),
             OldValue = oldStatus,
             NewValue = ActionWorkflowStatuses.Cancelled,
@@ -274,7 +277,7 @@ Demo Loan Officer
         }
 
         var assignee = await _dbContext.Users.SingleOrDefaultAsync(
-            user => user.OrganizationId == DevDataIds.OrganizationId
+            user => user.OrganizationId == _currentUser.OrganizationId
                 && user.Id == request.AssignedUserId
                 && user.IsActive,
             cancellationToken);
@@ -292,7 +295,7 @@ Demo Loan Officer
             Id = Guid.NewGuid(),
             LoanActionId = action.Id,
             EventType = ActionEventTypes.Reassigned,
-            ActorUserId = DevDataIds.LoanOfficerId,
+            ActorUserId = _currentUser.UserId,
             Reason = request.Reason.Trim(),
             OldValue = oldAssignedUserId?.ToString(),
             NewValue = assignee.Id.ToString(),
@@ -316,7 +319,7 @@ Demo Loan Officer
             .Include(action => action.Notes)
             .Include(action => action.AssignedUser)
             .SingleOrDefaultAsync(
-                action => action.OrganizationId == DevDataIds.OrganizationId && action.PublicId == publicId,
+                action => action.OrganizationId == _currentUser.OrganizationId && action.PublicId == publicId,
                 cancellationToken);
     }
 

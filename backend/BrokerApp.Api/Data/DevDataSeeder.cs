@@ -1,10 +1,15 @@
 using BrokerApp.Api.Domain;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using OpenIddict.Abstractions;
+using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace BrokerApp.Api.Data;
 
 public static class DevDataSeeder
 {
+    private const string DemoPassword = "BrokerApp!2026";
+
     private static readonly DemoTemplate[] DemoTemplates =
     [
         new("60000000-0000-0000-0000-000000000001", "Purchase Processing", "Purchase", "New file", true,
@@ -72,7 +77,10 @@ public static class DevDataSeeder
         ])
     ];
 
-    public static async Task SeedAsync(BrokerAppDbContext dbContext)
+    public static async Task SeedAsync(
+        BrokerAppDbContext dbContext,
+        UserManager<AppUser> userManager,
+        IOpenIddictApplicationManager applicationManager)
     {
         var now = DateTimeOffset.UtcNow;
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -82,50 +90,17 @@ public static class DevDataSeeder
             dbContext.Organizations.Add(new Organization
             {
                 Id = DevDataIds.OrganizationId,
-                Name = "Broker App Demo",
+                Name = "LobiLend Demo",
                 TimeZoneId = "Pacific Standard Time",
                 CreatedAtUtc = now
             });
+            await dbContext.SaveChangesAsync();
         }
 
-        if (!await dbContext.Users.AnyAsync(user => user.Id == DevDataIds.LoanOfficerId))
-        {
-            dbContext.Users.Add(new AppUser
-            {
-                Id = DevDataIds.LoanOfficerId,
-                OrganizationId = DevDataIds.OrganizationId,
-                DisplayName = "Demo Loan Officer",
-                Email = "loan.officer@example.local",
-                Role = UserRoles.LoanOfficer,
-                CreatedAtUtc = now
-            });
-        }
-
-        if (!await dbContext.Users.AnyAsync(user => user.Id == DevDataIds.BackupLoanOfficerId))
-        {
-            dbContext.Users.Add(new AppUser
-            {
-                Id = DevDataIds.BackupLoanOfficerId,
-                OrganizationId = DevDataIds.OrganizationId,
-                DisplayName = "Backup Loan Officer",
-                Email = "backup.officer@example.local",
-                Role = UserRoles.LoanOfficer,
-                CreatedAtUtc = now
-            });
-        }
-
-        if (!await dbContext.Users.AnyAsync(user => user.Id == DevDataIds.TeamLeadId))
-        {
-            dbContext.Users.Add(new AppUser
-            {
-                Id = DevDataIds.TeamLeadId,
-                OrganizationId = DevDataIds.OrganizationId,
-                DisplayName = "Demo Team Lead",
-                Email = "team.lead@example.local",
-                Role = UserRoles.TeamLead,
-                CreatedAtUtc = now
-            });
-        }
+        await SeedUserAsync(userManager, DevDataIds.LoanOfficerId, "Demo Loan Officer", "loan.officer@example.local", UserRoles.LoanOfficer, now);
+        await SeedUserAsync(userManager, DevDataIds.BackupLoanOfficerId, "Backup Loan Officer", "backup.officer@example.local", UserRoles.LoanOfficer, now);
+        await SeedUserAsync(userManager, DevDataIds.TeamLeadId, "Demo Team Lead", "team.lead@example.local", UserRoles.TeamLead, now);
+        await SeedOpenIddictClientAsync(applicationManager);
 
         foreach (var demoTemplate in DemoTemplates)
         {
@@ -303,6 +278,104 @@ public static class DevDataSeeder
         }
 
         await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task SeedUserAsync(
+        UserManager<AppUser> userManager,
+        Guid id,
+        string displayName,
+        string email,
+        string role,
+        DateTimeOffset now)
+    {
+        var user = await userManager.FindByIdAsync(id.ToString());
+
+        if (user is null)
+        {
+            user = new AppUser
+            {
+                Id = id,
+                OrganizationId = DevDataIds.OrganizationId,
+                DisplayName = displayName,
+                UserName = email,
+                Email = email,
+                EmailConfirmed = true,
+                Role = role,
+                IsActive = true,
+                CreatedAtUtc = now
+            };
+
+            var result = await userManager.CreateAsync(user, DemoPassword);
+            if (!result.Succeeded)
+            {
+                throw new InvalidOperationException(string.Join(" ", result.Errors.Select(error => error.Description)));
+            }
+
+            return;
+        }
+
+        user.OrganizationId = DevDataIds.OrganizationId;
+        user.DisplayName = displayName;
+        user.UserName = email;
+        user.Email = email;
+        user.EmailConfirmed = true;
+        user.Role = role;
+        user.IsActive = true;
+
+        if (string.IsNullOrWhiteSpace(user.PasswordHash))
+        {
+            var passwordResult = await userManager.AddPasswordAsync(user, DemoPassword);
+            if (!passwordResult.Succeeded)
+            {
+                throw new InvalidOperationException(string.Join(" ", passwordResult.Errors.Select(error => error.Description)));
+            }
+        }
+
+        var updateResult = await userManager.UpdateAsync(user);
+        if (!updateResult.Succeeded)
+        {
+            throw new InvalidOperationException(string.Join(" ", updateResult.Errors.Select(error => error.Description)));
+        }
+    }
+
+    private static async Task SeedOpenIddictClientAsync(IOpenIddictApplicationManager applicationManager)
+    {
+        if (await applicationManager.FindByClientIdAsync("broker-spa") is not null)
+        {
+            return;
+        }
+
+        await applicationManager.CreateAsync(new OpenIddictApplicationDescriptor
+        {
+            ClientId = "broker-spa",
+            ConsentType = ConsentTypes.Implicit,
+            DisplayName = "LobiLend SPA",
+            ClientType = ClientTypes.Public,
+            RedirectUris =
+            {
+                new Uri("http://127.0.0.1:5173/oidc-callback")
+            },
+            PostLogoutRedirectUris =
+            {
+                new Uri("http://127.0.0.1:5173/")
+            },
+            Permissions =
+            {
+                Permissions.Endpoints.Authorization,
+                Permissions.Endpoints.EndSession,
+                Permissions.Endpoints.Token,
+                Permissions.GrantTypes.AuthorizationCode,
+                Permissions.GrantTypes.RefreshToken,
+                Permissions.ResponseTypes.Code,
+                Permissions.Scopes.Email,
+                Permissions.Scopes.Profile,
+                Permissions.Scopes.Roles
+            },
+            Requirements =
+            {
+                Requirements.Features.ProofKeyForCodeExchange
+            }
+        });
     }
 
     private static AuditEvent CreateAuditEvent(

@@ -1,4 +1,6 @@
+using BrokerApp.Api.Domain;
 using BrokerApp.Api.Features.Users;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BrokerApp.Api.Controllers;
@@ -26,5 +28,19 @@ public sealed class UsersController : ControllerBase
         var user = await _userService.GetCurrentUserAsync(cancellationToken);
 
         return user is null ? NotFound() : Ok(user);
+    }
+
+    [Authorize(Roles = UserRoles.TeamLead)]
+    [HttpPost]
+    public async Task<ActionResult<CreateUserResponseDto>> Create(CreateUserRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _userService.CreateUserAsync(request, cancellationToken));
+        }
+        catch (UserValidationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
     }
 }

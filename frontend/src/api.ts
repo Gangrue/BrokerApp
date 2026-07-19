@@ -344,14 +344,54 @@ export type UserListItem = {
   email: string
   role: string
   isActive: boolean
+  emailConfirmed: boolean
 }
 
 export type CurrentUser = {
   id: string
+  organizationId: string
+  organizationName: string
   displayName: string
   email: string
   role: string
   isActive: boolean
+  emailConfirmed: boolean
+}
+
+export type AuthResult = {
+  user: CurrentUser | null
+  requiresEmailConfirmation: boolean
+  debugLink: string | null
+}
+
+export type RegisterRequest = {
+  organizationName: string
+  displayName: string
+  email: string
+  password: string
+}
+
+export type LoginRequest = {
+  email: string
+  password: string
+  rememberMe: boolean
+}
+
+export type ForgotPasswordResponse = {
+  message: string
+  debugLink: string | null
+}
+
+export type CreateUserRequest = {
+  displayName: string
+  email: string
+  role: string
+}
+
+export type CreateUserResponse = {
+  user: UserListItem
+  confirmationDebugLink: string | null
+  passwordResetDebugLink: string | null
 }
 
 export type ActionTemplateDetail = {
@@ -395,56 +435,177 @@ export type GenerateLoanActionsResponse = {
   skippedCount: number
 }
 
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+let csrfToken: string | null = null
+
+export class AuthRequiredError extends Error {
+  constructor() {
+    super('Authentication is required.')
+  }
+}
+
+function apiUrl(path: string) {
+  return `${apiBaseUrl}${path}`
+}
+
+async function ensureCsrfToken() {
+  if (csrfToken) {
+    return csrfToken
+  }
+
+  return await refreshCsrfToken()
+}
+
+async function refreshCsrfToken() {
+  clearCsrfToken()
+
+  const response = await fetch(apiUrl('/api/v1/auth/csrf'), {
+    cache: 'no-store',
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response))
+  }
+
+  const body = await response.json() as { csrfToken: string }
+  csrfToken = body.csrfToken
+
+  if (!csrfToken) {
+    throw new Error('CSRF token was not issued.')
+  }
+
+  return csrfToken
+}
+
+function clearCsrfToken() {
+  csrfToken = null
+}
+
 async function readErrorMessage(response: Response) {
   try {
-    const body = await response.json() as { message?: string }
+    const body = await response.json() as {
+      detail?: string
+      errors?: Record<string, string[]>
+      message?: string
+      title?: string
+    }
 
-    return body.message ?? `Request failed with ${response.status}`
+    if (body.message) {
+      return body.message
+    }
+
+    if (body.errors) {
+      const messages = Object.values(body.errors).flat()
+
+      if (messages.length > 0) {
+        return messages.join(' ')
+      }
+    }
+
+    return body.detail ?? body.title ?? `Request failed with ${response.status}`
   } catch {
     return `Request failed with ${response.status}`
   }
 }
 
+async function shouldRetryWithFreshCsrf(response: Response) {
+  if (response.status !== 400) {
+    return false
+  }
+
+  try {
+    const body = await response.json() as {
+      detail?: string
+      errors?: Record<string, string[]>
+      message?: string
+      title?: string
+    }
+
+    return body.title === 'Bad Request'
+      && !body.message
+      && !body.detail
+      && !body.errors
+  } catch {
+    return false
+  }
+}
+
 async function getJson<T>(url: string): Promise<T> {
-  const response = await fetch(url)
+  const response = await fetch(apiUrl(url), {
+    credentials: 'include',
+  })
+
+  if (response.status === 401) {
+    throw new AuthRequiredError()
+  }
 
   if (!response.ok) {
     throw new Error(await readErrorMessage(response))
   }
 
-  return await response.json() as T
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  const text = await response.text()
+
+  return text ? JSON.parse(text) as T : undefined as T
 }
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
-
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response))
-  }
-
-  return await response.json() as T
+  return sendJson<T>('POST', url, body)
 }
 
 async function putJson<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method: 'PUT',
+  return sendJson<T>('PUT', url, body)
+}
+
+async function deleteJson<T>(url: string): Promise<T> {
+  return sendJson<T>('DELETE', url)
+}
+
+async function sendJson<T>(method: 'POST' | 'PUT' | 'DELETE', url: string, body?: unknown): Promise<T> {
+  const token = await ensureCsrfToken()
+  let response = await fetch(apiUrl(url), {
+    method,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      'X-XSRF-TOKEN': token,
     },
-    body: JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify(body),
   })
+
+  if (await shouldRetryWithFreshCsrf(response.clone())) {
+    clearCsrfToken()
+    const retryToken = await ensureCsrfToken()
+    response = await fetch(apiUrl(url), {
+      method,
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-XSRF-TOKEN': retryToken,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  }
+
+  if (response.status === 401) {
+    throw new AuthRequiredError()
+  }
 
   if (!response.ok) {
     throw new Error(await readErrorMessage(response))
   }
 
-  return await response.json() as T
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  const text = await response.text()
+
+  return text ? JSON.parse(text) as T : undefined as T
 }
 
 export function getDashboard() {
@@ -483,8 +644,47 @@ export function getUsers() {
   return getJson<UserListItem[]>('/api/v1/users')
 }
 
+export function createUser(request: CreateUserRequest) {
+  return postJson<CreateUserResponse>('/api/v1/users', request)
+}
+
 export function getCurrentUser() {
-  return getJson<CurrentUser>('/api/v1/users/me')
+  return getJson<CurrentUser>('/api/v1/auth/me')
+}
+
+export async function register(request: RegisterRequest) {
+  const result = await postJson<AuthResult>('/api/v1/auth/register', request)
+  await refreshCsrfToken()
+
+  return result
+}
+
+export async function login(request: LoginRequest) {
+  const result = await postJson<AuthResult>('/api/v1/auth/login', request)
+  await refreshCsrfToken()
+
+  return result
+}
+
+export async function logout() {
+  await postJson('/api/v1/auth/logout', {})
+  await refreshCsrfToken()
+}
+
+export function forgotPassword(email: string) {
+  return postJson<ForgotPasswordResponse>('/api/v1/auth/forgot-password', { email })
+}
+
+export function resetPassword(email: string, token: string, newPassword: string) {
+  return postJson<{ message: string }>('/api/v1/auth/reset-password', {
+    email,
+    token,
+    newPassword,
+  })
+}
+
+export function confirmEmail(email: string, token: string) {
+  return getJson<{ message: string }>(`/api/v1/auth/confirm-email?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`)
 }
 
 export function getActionTemplate(id: string) {
@@ -497,6 +697,10 @@ export function getActionEmailDraft(publicId: string) {
 
 export function updateLoan(loanNumber: string, request: UpdateLoanRequest) {
   return putJson<LoanDetail>(`/api/v1/loans/${encodeURIComponent(loanNumber)}`, request)
+}
+
+export function deleteLoan(loanNumber: string) {
+  return deleteJson<void>(`/api/v1/loans/${encodeURIComponent(loanNumber)}`)
 }
 
 export function createActionTemplate(request: UpsertActionTemplateRequest) {

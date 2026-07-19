@@ -85,7 +85,7 @@ public sealed class LoanServiceTests
         Assert.Contains(dbContext.ActionEvents, actionEvent => actionEvent.EventType == ActionEventTypes.Created
             && actionEvent.Reason == "Created from loan workspace.");
 
-        var dashboard = await new DashboardService(dbContext, new FixedClock(today)).GetSummaryAsync();
+        var dashboard = await new DashboardService(dbContext, new FixedClock(today), TestCurrentUserContext.Instance).GetSummaryAsync();
 
         Assert.Contains(dashboard.OpenActions, action => action.Id == "ACT-1001");
     }
@@ -195,7 +195,8 @@ public sealed class LoanServiceTests
         return new LoanService(
             dbContext,
             clock,
-            new ActionPublicIdGenerator(dbContext),
-            new AuditWriter(dbContext, clock));
+            new ActionPublicIdGenerator(dbContext, TestCurrentUserContext.Instance),
+            new AuditWriter(dbContext, clock, TestCurrentUserContext.Instance),
+            TestCurrentUserContext.Instance);
     }
 }

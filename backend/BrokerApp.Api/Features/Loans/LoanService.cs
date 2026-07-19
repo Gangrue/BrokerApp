@@ -1,6 +1,7 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
 using BrokerApp.Api.Features.Actions;
+using BrokerApp.Api.Features.Auth;
 using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,7 @@ public interface ILoanService
         string loanNumber,
         UpdateLoanRequest request,
         CancellationToken cancellationToken = default);
+    Task<bool> DeleteLoanAsync(string loanNumber, CancellationToken cancellationToken = default);
 }
 
 public sealed class LoanService : ILoanService
@@ -27,17 +29,20 @@ public sealed class LoanService : ILoanService
     private readonly ISystemClock _clock;
     private readonly IActionPublicIdGenerator _actionPublicIdGenerator;
     private readonly IAuditWriter _auditWriter;
+    private readonly ICurrentUserContext _currentUser;
 
     public LoanService(
         BrokerAppDbContext dbContext,
         ISystemClock clock,
         IActionPublicIdGenerator actionPublicIdGenerator,
-        IAuditWriter auditWriter)
+        IAuditWriter auditWriter,
+        ICurrentUserContext currentUser)
     {
         _dbContext = dbContext;
         _clock = clock;
         _actionPublicIdGenerator = actionPublicIdGenerator;
         _auditWriter = auditWriter;
+        _currentUser = currentUser;
     }
 
     public async Task<IReadOnlyCollection<LoanListItemDto>> GetLoansAsync(CancellationToken cancellationToken = default)
@@ -47,7 +52,7 @@ public sealed class LoanService : ILoanService
             .Include(loan => loan.Customer)
             .Include(loan => loan.OwnerUser)
             .Include(loan => loan.Actions)
-            .Where(loan => loan.OrganizationId == DevDataIds.OrganizationId)
+            .Where(loan => loan.OrganizationId == _currentUser.OrganizationId)
             .OrderBy(loan => loan.TargetCloseDate)
             .ThenBy(loan => loan.LoanNumber)
             .ToListAsync(cancellationToken);
@@ -96,7 +101,7 @@ public sealed class LoanService : ILoanService
                 .ThenInclude(action => action.Events)
             .Include(loan => loan.Notes)
             .SingleOrDefaultAsync(
-                loan => loan.OrganizationId == DevDataIds.OrganizationId && loan.LoanNumber == loanNumber,
+                loan => loan.OrganizationId == _currentUser.OrganizationId && loan.LoanNumber == loanNumber,
                 cancellationToken);
 
         if (loan is null)
@@ -175,7 +180,7 @@ public sealed class LoanService : ILoanService
         var input = ValidateLoanUpdate(request);
         var normalizedLoanNumber = Require(loanNumber, "Loan number");
         var loan = await _dbContext.Loans.SingleOrDefaultAsync(
-            item => item.OrganizationId == DevDataIds.OrganizationId && item.LoanNumber == normalizedLoanNumber,
+            item => item.OrganizationId == _currentUser.OrganizationId && item.LoanNumber == normalizedLoanNumber,
             cancellationToken);
 
         if (loan is null)
@@ -238,7 +243,7 @@ public sealed class LoanService : ILoanService
         var loan = await _dbContext.Loans
             .Include(item => item.Customer)
             .SingleOrDefaultAsync(
-                item => item.OrganizationId == DevDataIds.OrganizationId && item.LoanNumber == normalizedLoanNumber,
+                item => item.OrganizationId == _currentUser.OrganizationId && item.LoanNumber == normalizedLoanNumber,
                 cancellationToken);
 
         if (loan is null)
@@ -251,9 +256,9 @@ public sealed class LoanService : ILoanService
         var action = new LoanAction
         {
             Id = Guid.NewGuid(),
-            OrganizationId = DevDataIds.OrganizationId,
+            OrganizationId = _currentUser.OrganizationId,
             LoanId = loan.Id,
-            AssignedUserId = DevDataIds.LoanOfficerId,
+            AssignedUserId = _currentUser.UserId,
             PublicId = actionId,
             Type = "Condition",
             Section = input.Section,
@@ -271,7 +276,7 @@ public sealed class LoanService : ILoanService
             Id = Guid.NewGuid(),
             LoanActionId = action.Id,
             EventType = ActionEventTypes.Created,
-            ActorUserId = DevDataIds.LoanOfficerId,
+            ActorUserId = _currentUser.UserId,
             Reason = "Created from loan workspace.",
             OccurredAtUtc = now
         });
@@ -291,6 +296,40 @@ public sealed class LoanService : ILoanService
             action.Section,
             action.Priority,
             action.DueDate);
+    }
+
+    public async Task<bool> DeleteLoanAsync(string loanNumber, CancellationToken cancellationToken = default)
+    {
+        var normalizedLoanNumber = Require(loanNumber, "Loan number");
+        var loan = await _dbContext.Loans
+            .Include(item => item.Actions)
+                .ThenInclude(action => action.Events)
+            .Include(item => item.Notes)
+            .SingleOrDefaultAsync(
+                item => item.OrganizationId == _currentUser.OrganizationId && item.LoanNumber == normalizedLoanNumber,
+                cancellationToken);
+
+        if (loan is null)
+        {
+            return false;
+        }
+
+        var actionEvents = loan.Actions.SelectMany(action => action.Events).ToArray();
+
+        _dbContext.LoanNotes.RemoveRange(loan.Notes);
+        _dbContext.ActionEvents.RemoveRange(actionEvents);
+        _dbContext.LoanActions.RemoveRange(loan.Actions);
+        _dbContext.Loans.Remove(loan);
+
+        _auditWriter.Record(
+            "Loan",
+            loan.LoanNumber,
+            AuditOperations.Deleted,
+            "Loan file deleted from prototype workspace.");
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return true;
     }
 
     private static bool IsOpen(LoanAction action)

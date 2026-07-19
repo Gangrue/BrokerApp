@@ -49,6 +49,14 @@ public sealed class LoansController : ControllerBase
         }
     }
 
+    [HttpDelete("{loanNumber}")]
+    public async Task<IActionResult> DeleteLoan(string loanNumber, CancellationToken cancellationToken)
+    {
+        var deleted = await _loanService.DeleteLoanAsync(loanNumber, cancellationToken);
+
+        return deleted ? NoContent() : NotFound();
+    }
+
     [HttpPost("{loanNumber}/actions")]
     public async Task<ActionResult<CreateLoanActionResponse>> CreateAction(
         string loanNumber,

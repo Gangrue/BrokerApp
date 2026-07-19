@@ -2,12 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import {
   addActionComment,
+  AuthRequiredError,
   cancelAction,
   completeAction,
+  confirmEmail,
   createActionTemplate,
   createCustomerLoan,
   createFileIntake,
   createLoanAction,
+  createUser,
+  deleteLoan,
   generateLoanActions,
   getActionTemplate,
   getActionEmailDraft,
@@ -20,7 +24,12 @@ import {
   getLoans,
   getReportSummary,
   getUsers,
+  forgotPassword,
+  login,
+  logout,
   reassignAction,
+  register,
+  resetPassword,
   rescheduleAction,
   updateActionTemplate,
   updateCustomer,
@@ -44,10 +53,12 @@ import type {
   UserListItem,
 } from './api'
 import familyImage from './assets/FamilyImage.png'
+import lobilendLogo from './assets/lobilend-logo-white.png'
 import piggyImage from './assets/PiggyImage.webp'
 import './App.css'
 
 type WorkspaceView = 'home' | 'dashboard' | 'actionDetail' | 'loans' | 'loanDetail' | 'customers' | 'customerDetail' | 'reports' | 'admin' | 'account' | 'intake'
+type AuthView = 'login' | 'register' | 'forgotPassword' | 'resetPassword' | 'confirmEmail'
 type QueueFilter = 'all' | 'overdue' | 'today' | 'high'
 type DashboardSpotlightFilter = 'overdue' | 'today' | 'upcoming' | 'open' | 'closing'
 type DashboardPanelFlash = 'closing' | 'icd'
@@ -60,6 +71,31 @@ const dashboardSpotlightTitles: Record<DashboardSpotlightFilter, string> = {
   upcoming: 'Upcoming loans',
 }
 type BorrowerMode = 'new' | 'existing'
+
+type LoginFormState = {
+  email: string
+  password: string
+  rememberMe: boolean
+}
+
+type RegisterFormState = {
+  organizationName: string
+  displayName: string
+  email: string
+  password: string
+}
+
+type ResetPasswordFormState = {
+  email: string
+  token: string
+  newPassword: string
+}
+
+type UserCreateFormState = {
+  displayName: string
+  email: string
+  role: string
+}
 
 type IntakeActionForm = {
   title: string
@@ -204,6 +240,7 @@ const loanStatuses = ['Draft', 'Active', 'On Hold', 'Closed', 'Canceled']
 const customerStatuses = ['Active', 'Archived']
 const actionSections = ['Borrower', 'Title', 'Realtor']
 const actionPriorities = ['Normal', 'High']
+const userRoles = ['Loan Officer', 'Team Lead']
 const listPageSize = 8
 
 function formatDueDate(value: string | null) {
@@ -390,6 +427,91 @@ function emptyTemplateForm(): TemplateFormState {
   }
 }
 
+function emptyUserCreateForm(): UserCreateFormState {
+  return {
+    displayName: '',
+    email: '',
+    role: 'Loan Officer',
+  }
+}
+
+function initialAuthView(): AuthView {
+  const path = window.location.pathname.toLowerCase()
+
+  if (path.includes('register')) {
+    return 'register'
+  }
+
+  if (path.includes('forgot-password')) {
+    return 'forgotPassword'
+  }
+
+  if (path.includes('reset-password')) {
+    return 'resetPassword'
+  }
+
+  if (path.includes('confirm-email')) {
+    return 'confirmEmail'
+  }
+
+  return 'login'
+}
+
+function isAuthPath() {
+  const path = window.location.pathname.toLowerCase()
+
+  return path.includes('login')
+    || path.includes('register')
+    || path.includes('forgot-password')
+    || path.includes('reset-password')
+    || path.includes('confirm-email')
+}
+
+function replacePath(path: string) {
+  if (window.location.pathname !== path) {
+    window.history.replaceState(null, '', path)
+  }
+}
+
+function authPath(view: AuthView) {
+  switch (view) {
+    case 'register':
+      return '/register'
+    case 'forgotPassword':
+      return '/forgot-password'
+    case 'resetPassword':
+      return '/reset-password'
+    case 'confirmEmail':
+      return '/confirm-email'
+    default:
+      return '/login'
+  }
+}
+
+function initialResetPasswordForm(): ResetPasswordFormState {
+  const params = new URLSearchParams(window.location.search)
+
+  return {
+    email: params.get('email') ?? '',
+    token: params.get('token') ?? '',
+    newPassword: '',
+  }
+}
+
+function resetFormFromLink(resetLink: string): ResetPasswordFormState | null {
+  try {
+    const url = new URL(resetLink)
+
+    return {
+      email: url.searchParams.get('email') ?? '',
+      token: url.searchParams.get('token') ?? '',
+      newPassword: '',
+    }
+  } catch {
+    return null
+  }
+}
+
 function templateDetailToForm(template: ActionTemplateDetail): TemplateFormState {
   return {
     id: template.id,
@@ -414,13 +536,30 @@ function optionalText(value: string) {
   return trimmed ? trimmed : null
 }
 
+function parseAmountInput(value: string) {
+  const trimmed = value.trim()
+
+  if (!trimmed) {
+    return null
+  }
+
+  const normalized = trimmed.replace(/[$,\s]/g, '')
+  const amount = Number(normalized)
+
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error('Loan amount must be a valid positive number.')
+  }
+
+  return amount
+}
+
 function buildCustomerLoanRequest(form: IntakeFormState) {
   return {
     loan: {
       loanNumber: form.loanNumber.trim(),
       type: form.type,
       stage: form.stage,
-      amount: form.amount.trim() ? Number(form.amount) : null,
+      amount: parseAmountInput(form.amount),
       targetCloseDate: optionalText(form.targetCloseDate),
       coBorrowerEmail: optionalText(form.coBorrowerEmail),
       titleContactName: optionalText(form.titleContactName),
@@ -473,16 +612,20 @@ function App() {
   const [customerLoanForm, setCustomerLoanForm] = useState<IntakeFormState>(() => emptyIntakeForm())
   const [followUpAction, setFollowUpAction] = useState<FollowUpActionForm>(() => emptyFollowUpAction())
   const [templateForm, setTemplateForm] = useState<TemplateFormState>(() => emptyTemplateForm())
+  const [userCreateForm, setUserCreateForm] = useState<UserCreateFormState>(() => emptyUserCreateForm())
   const [customerEditForm, setCustomerEditForm] = useState<CustomerEditForm>(() => emptyCustomerEditForm())
   const [loanEditForm, setLoanEditForm] = useState<LoanEditForm>(() => emptyLoanEditForm())
   const [emailDraft, setEmailDraft] = useState<ActionEmailDraft | null>(null)
+  const [userInvitationLinks, setUserInvitationLinks] = useState<{ confirmation: string | null, reset: string | null } | null>(null)
   const [isEmailSendConfirmOpen, setIsEmailSendConfirmOpen] = useState(false)
+  const [pendingDeleteLoanNumber, setPendingDeleteLoanNumber] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isMutating, setIsMutating] = useState(false)
   const [isGeneratingEmailDraft, setIsGeneratingEmailDraft] = useState(false)
   const [isSubmittingIntake, setIsSubmittingIntake] = useState(false)
   const [isSubmittingCustomerLoan, setIsSubmittingCustomerLoan] = useState(false)
   const [isSavingTemplate, setIsSavingTemplate] = useState(false)
+  const [isCreatingUser, setIsCreatingUser] = useState(false)
   const [isSavingCustomer, setIsSavingCustomer] = useState(false)
   const [isSavingLoan, setIsSavingLoan] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -491,6 +634,23 @@ function App() {
   const [actionPage, setActionPage] = useState(0)
   const [customerPage, setCustomerPage] = useState(0)
   const [loanPage, setLoanPage] = useState(0)
+  const [authView, setAuthView] = useState<AuthView>(() => initialAuthView())
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [authMessage, setAuthMessage] = useState<string | null>(null)
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false)
+  const [loginForm, setLoginForm] = useState<LoginFormState>({
+    email: '',
+    password: '',
+    rememberMe: false,
+  })
+  const [registerForm, setRegisterForm] = useState<RegisterFormState>({
+    organizationName: '',
+    displayName: '',
+    email: '',
+    password: '',
+  })
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('')
+  const [resetPasswordForm, setResetPasswordForm] = useState<ResetPasswordFormState>(() => initialResetPasswordForm())
 
   async function loadWorkspace(preferredActionId?: string | null) {
     const [dashboardSummary, loanRows, customerRows, reportRows, templateRows, userRows, activeUser] = await Promise.all([
@@ -528,24 +688,58 @@ function App() {
     return { dashboardSummary, nextSelectedActionId }
   }
 
+  async function loadAuthenticatedWorkspace(preferredActionId?: string | null) {
+    const { dashboardSummary, nextSelectedActionId } = await loadWorkspace(preferredActionId)
+    const selectedAction = dashboardSummary.openActions.find((action) => action.id === nextSelectedActionId)
+
+    if (selectedAction) {
+      setLoanDetail(await getLoan(selectedAction.loanNumber))
+    }
+
+    setError(null)
+  }
+
+  function clearWorkspaceState() {
+    setDashboard(emptyDashboard)
+    setLoans([])
+    setCustomers([])
+    setReportSummary(emptyReportSummary)
+    setTemplates([])
+    setUsers([])
+    setCurrentUser(null)
+    setLoanDetail(null)
+    setCustomerDetail(null)
+    setTemplateDetail(null)
+    setSelectedActionId(null)
+    setSelectedCustomerId(null)
+    setSelectedLoanNumber(null)
+    setSelectedTemplateId(null)
+  }
+
   useEffect(() => {
     let isMounted = true
 
     async function loadInitialState() {
       try {
-        const { dashboardSummary, nextSelectedActionId } = await loadWorkspace()
-        const selectedAction = dashboardSummary.openActions.find((action) => action.id === nextSelectedActionId)
-
-        if (selectedAction) {
-          setLoanDetail(await getLoan(selectedAction.loanNumber))
-        }
-
+        await loadAuthenticatedWorkspace()
         if (isMounted) {
           setError(null)
+          if (isAuthPath()) {
+            replacePath('/')
+            setWorkflowMessage('Already signed in.')
+          }
         }
       } catch (caughtError) {
         if (isMounted) {
-          setError(caughtError instanceof Error ? caughtError.message : 'Dashboard request failed')
+          if (caughtError instanceof AuthRequiredError) {
+            clearWorkspaceState()
+            setAuthView(initialAuthView())
+            if (!isAuthPath()) {
+              replacePath('/login')
+            }
+          } else {
+            setError(caughtError instanceof Error ? caughtError.message : 'Dashboard request failed')
+          }
         }
       } finally {
         if (isMounted) {
@@ -560,6 +754,134 @@ function App() {
       isMounted = false
     }
   }, [])
+
+  async function submitLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsAuthSubmitting(true)
+    setAuthError(null)
+    setAuthMessage(null)
+
+    try {
+      const result = await login({
+        email: loginForm.email,
+        password: loginForm.password,
+        rememberMe: loginForm.rememberMe,
+      })
+
+      if (result.requiresEmailConfirmation) {
+        setAuthMessage(result.debugLink ? `Confirm your email first: ${result.debugLink}` : 'Confirm your email before logging in.')
+        return
+      }
+
+      await loadAuthenticatedWorkspace()
+      replacePath('/')
+      setWorkflowMessage(`Signed in as ${result.user?.displayName ?? loginForm.email}.`)
+    } catch (caughtError) {
+      setAuthError(caughtError instanceof Error ? caughtError.message : 'Login failed')
+    } finally {
+      setIsAuthSubmitting(false)
+    }
+  }
+
+  async function submitRegister(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsAuthSubmitting(true)
+    setAuthError(null)
+    setAuthMessage(null)
+
+    try {
+      const result = await register(registerForm)
+
+      if (result.requiresEmailConfirmation) {
+        setAuthMessage(result.debugLink ? `Account created. Confirm your email: ${result.debugLink}` : 'Account created. Confirm your email before logging in.')
+        setAuthView('login')
+        replacePath('/login')
+        setLoginForm((current) => ({ ...current, email: registerForm.email }))
+        return
+      }
+
+      await loadAuthenticatedWorkspace()
+      replacePath('/')
+      setWorkflowMessage(`Welcome, ${result.user?.displayName ?? registerForm.displayName}.`)
+    } catch (caughtError) {
+      setAuthError(caughtError instanceof Error ? caughtError.message : 'Registration failed')
+    } finally {
+      setIsAuthSubmitting(false)
+    }
+  }
+
+  async function submitForgotPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsAuthSubmitting(true)
+    setAuthError(null)
+    setAuthMessage(null)
+
+    try {
+      const result = await forgotPassword(forgotPasswordEmail)
+      if (result.debugLink) {
+        const resetForm = resetFormFromLink(result.debugLink)
+
+        if (resetForm) {
+          setResetPasswordForm(resetForm)
+          setAuthView('resetPassword')
+          replacePath('/reset-password')
+          setAuthMessage('Development reset link loaded. Enter a new password to finish.')
+          return
+        }
+      }
+
+      setAuthMessage(result.message)
+    } catch (caughtError) {
+      setAuthError(caughtError instanceof Error ? caughtError.message : 'Password reset request failed')
+    } finally {
+      setIsAuthSubmitting(false)
+    }
+  }
+
+  async function submitResetPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsAuthSubmitting(true)
+    setAuthError(null)
+    setAuthMessage(null)
+
+    try {
+      await resetPassword(resetPasswordForm.email, resetPasswordForm.token, resetPasswordForm.newPassword)
+      setAuthMessage('Password reset complete. You can log in now.')
+      setAuthView('login')
+      replacePath('/login')
+    } catch (caughtError) {
+      setAuthError(caughtError instanceof Error ? caughtError.message : 'Password reset failed')
+    } finally {
+      setIsAuthSubmitting(false)
+    }
+  }
+
+  async function submitConfirmEmail() {
+    const params = new URLSearchParams(window.location.search)
+    const email = params.get('email') ?? resetPasswordForm.email
+    const token = params.get('token') ?? resetPasswordForm.token
+
+    if (!email || !token) {
+      setAuthError('Confirmation link is missing email or token.')
+      return
+    }
+
+    setIsAuthSubmitting(true)
+    setAuthError(null)
+    setAuthMessage(null)
+
+    try {
+      const result = await confirmEmail(email, token)
+      setAuthMessage(result.message)
+      setAuthView('login')
+      replacePath('/login')
+      setLoginForm((current) => ({ ...current, email }))
+    } catch (caughtError) {
+      setAuthError(caughtError instanceof Error ? caughtError.message : 'Email confirmation failed')
+    } finally {
+      setIsAuthSubmitting(false)
+    }
+  }
 
   const filteredActions = useMemo(() => {
     const query = searchTerm.trim().toLowerCase()
@@ -779,6 +1101,19 @@ function App() {
     scrollWorkspaceItemIntoView('action', actionId)
   }
 
+  function openDashboardLoanAction(loanNumber: string) {
+    const action = filteredActions.find((item) => item.loanNumber === loanNumber)
+      ?? dashboard.openActions.find((item) => item.loanNumber === loanNumber)
+
+    if (action) {
+      openDashboardAction(action.id)
+      return
+    }
+
+    setView('dashboard')
+    scrollWorkspaceToTop()
+  }
+
   function openLoanPipeline(loanNumber: string) {
     setSelectedLoanNumber(loanNumber)
     setLoanPage(pageForIndex(filteredLoans.findIndex((loan) => loan.loanNumber === loanNumber)))
@@ -790,6 +1125,14 @@ function App() {
     setSelectedLoanNumber(loanNumber)
     setView('loanDetail')
     scrollWorkspaceToTop()
+  }
+
+  function requestDeleteLoan(loanNumber: string) {
+    setPendingDeleteLoanNumber(loanNumber)
+  }
+
+  function discardDeleteLoan() {
+    setPendingDeleteLoanNumber(null)
   }
 
   function backToLoanPipeline() {
@@ -1255,7 +1598,7 @@ function App() {
         type: loanEditForm.type,
         stage: loanEditForm.stage,
         status: loanEditForm.status,
-        amount: loanEditForm.amount.trim() ? Number(loanEditForm.amount) : null,
+        amount: parseAmountInput(loanEditForm.amount),
         targetCloseDate: optionalText(loanEditForm.targetCloseDate),
         coBorrowerEmail: optionalText(loanEditForm.coBorrowerEmail),
         titleContactName: optionalText(loanEditForm.titleContactName),
@@ -1273,6 +1616,33 @@ function App() {
       setError(caughtError instanceof Error ? caughtError.message : 'Loan update failed')
     } finally {
       setIsSavingLoan(false)
+    }
+  }
+
+  async function confirmDeleteLoan() {
+    if (!pendingDeleteLoanNumber) {
+      return
+    }
+
+    setIsMutating(true)
+    setWorkflowMessage(null)
+    setError(null)
+
+    try {
+      await deleteLoan(pendingDeleteLoanNumber)
+      const remainingLoans = loans.filter((loan) => loan.loanNumber !== pendingDeleteLoanNumber)
+      const nextLoanNumber = remainingLoans[0]?.loanNumber ?? null
+
+      await loadWorkspace()
+      setSelectedLoanNumber(nextLoanNumber)
+      setLoanDetail(nextLoanNumber ? await getLoan(nextLoanNumber) : null)
+      setPendingDeleteLoanNumber(null)
+      setView('loans')
+      setWorkflowMessage(`${pendingDeleteLoanNumber} deleted.`)
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Loan delete failed')
+    } finally {
+      setIsMutating(false)
     }
   }
 
@@ -1421,6 +1791,40 @@ function App() {
     }
   }
 
+  function updateUserCreateField(field: keyof UserCreateFormState, value: string) {
+    setUserCreateForm((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
+  async function submitUserCreate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsCreatingUser(true)
+    setUserInvitationLinks(null)
+    setWorkflowMessage(null)
+    setError(null)
+
+    try {
+      const response = await createUser({
+        displayName: userCreateForm.displayName.trim(),
+        email: userCreateForm.email.trim(),
+        role: userCreateForm.role,
+      })
+      setUsers(await getUsers())
+      setUserCreateForm(emptyUserCreateForm())
+      setUserInvitationLinks({
+        confirmation: response.confirmationDebugLink,
+        reset: response.passwordResetDebugLink,
+      })
+      setWorkflowMessage(`${response.user.displayName} invited.`)
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'User invite failed')
+    } finally {
+      setIsCreatingUser(false)
+    }
+  }
+
   function updateIntakeField(field: keyof Omit<IntakeFormState, 'actions'>, value: string | boolean) {
     setIntakeForm((current) => ({
       ...current,
@@ -1559,9 +1963,54 @@ function App() {
     }
   }
 
-  function logOutPrototypeSession() {
-    setWorkflowMessage('Logged out of prototype session. Login page is planned next.')
-    setView('account')
+  async function logOutSession() {
+    setIsMutating(true)
+    setWorkflowMessage(null)
+    setError(null)
+
+    try {
+      await logout()
+    } catch (caughtError) {
+      if (!(caughtError instanceof AuthRequiredError)) {
+        setError(caughtError instanceof Error ? caughtError.message : 'Logout failed')
+      }
+    } finally {
+      clearWorkspaceState()
+      setAuthView('login')
+      replacePath('/login')
+      setAuthMessage('Signed out.')
+      setIsMutating(false)
+    }
+  }
+
+  if (!isLoading && !currentUser) {
+    return (
+      <AuthShell
+        authError={authError}
+        authMessage={authMessage}
+        authView={authView}
+        forgotPasswordEmail={forgotPasswordEmail}
+        isSubmitting={isAuthSubmitting}
+        loginForm={loginForm}
+        registerForm={registerForm}
+        resetPasswordForm={resetPasswordForm}
+        onAuthViewChange={(nextView) => {
+          setAuthView(nextView)
+          replacePath(authPath(nextView))
+          setAuthError(null)
+          setAuthMessage(null)
+        }}
+        onConfirmEmail={submitConfirmEmail}
+        onForgotPasswordEmailChange={setForgotPasswordEmail}
+        onLoginChange={setLoginForm}
+        onRegisterChange={setRegisterForm}
+        onResetPasswordChange={setResetPasswordForm}
+        onSubmitForgotPassword={submitForgotPassword}
+        onSubmitLogin={submitLogin}
+        onSubmitRegister={submitRegister}
+        onSubmitResetPassword={submitResetPassword}
+      />
+    )
   }
 
   return (
@@ -1577,9 +2026,9 @@ function App() {
           {isSidebarCollapsed ? '>' : '<'}
         </button>
         <button className="brand" type="button" onClick={() => openSidebarView('home')}>
-          <span className="brand-mark">BA</span>
+          <span className="brand-mark">LL</span>
           <span>
-            <strong>Broker App</strong>
+            <strong>LobiLend</strong>
             <small>Loan workflow</small>
           </span>
         </button>
@@ -1618,7 +2067,7 @@ function App() {
             <span>Queue health</span>
             <strong>{dashboard.overdueCount === 0 ? 'On track' : `${dashboard.overdueCount} overdue`}</strong>
           </div>
-          <button className="logout-button" type="button" onClick={logOutPrototypeSession}>
+          <button className="logout-button" type="button" onClick={logOutSession}>
             Log out
           </button>
         </div>
@@ -1750,13 +2199,13 @@ function App() {
               isHighlighted={dashboardPanelFlash === 'closing'}
               items={dashboardSpotlightItems}
               title={dashboardSpotlightTitles[dashboardSpotlightFilter]}
-              onOpenLoan={openLoanPipeline}
+              onOpenLoan={openDashboardLoanAction}
             />
             <DashboardAlertList
               isHighlighted={dashboardPanelFlash === 'icd'}
               items={dashboard.icdNeedsAttention}
               title="ICD not sent/signed"
-              onOpenLoan={openLoanPipeline}
+              onOpenLoan={openDashboardLoanAction}
             />
           </section>
 
@@ -1886,6 +2335,7 @@ function App() {
             onLoanEditFieldChange={updateLoanEditField}
             onLoanEditSubmit={submitLoanEdit}
             onOpenAction={openDashboardAction}
+            onRequestDelete={requestDeleteLoan}
           />
         ) : view === 'customers' ? (
           <section className="content-grid">
@@ -1993,21 +2443,28 @@ function App() {
             summary={reportSummary}
           />
         ) : view === 'account' ? (
-          <MyAccountPage currentUser={currentUser} onLogOut={logOutPrototypeSession} />
+          <MyAccountPage currentUser={currentUser} onLogOut={logOutSession} />
         ) : view === 'admin' ? (
           <AdminTemplatesPage
             disabled={isSavingTemplate}
             filteredTemplates={filteredTemplates}
             form={templateForm}
+            currentUser={currentUser}
+            isCreatingUser={isCreatingUser}
             selectedTemplate={selectedTemplate}
             templateDetail={templateDetail}
+            userCreateForm={userCreateForm}
+            userInvitationLinks={userInvitationLinks}
+            users={users}
             onAddItem={addTemplateItem}
             onNewTemplate={startNewTemplate}
             onRemoveItem={removeTemplateItem}
+            onSubmitUser={submitUserCreate}
             onSelectTemplate={setSelectedTemplateId}
             onSubmit={submitTemplate}
             onUpdateField={updateTemplateField}
             onUpdateItem={updateTemplateItem}
+            onUpdateUserField={updateUserCreateField}
           />
         ) : (
           <section className="content-grid">
@@ -2071,6 +2528,7 @@ function App() {
               selected={selectedLoan}
               onOpenAction={openDashboardAction}
               onOpenDetails={openLoanDetail}
+              onRequestDelete={requestDeleteLoan}
             />
           </section>
         )}
@@ -2083,6 +2541,22 @@ function App() {
             <div className="modal-actions">
               <button type="button" onClick={confirmSendEmailDraft}>Send</button>
               <button className="secondary" type="button" onClick={discardEmailSend}>Discard</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {pendingDeleteLoanNumber && (
+        <div className="modal-backdrop" role="presentation">
+          <div aria-modal="true" className="confirmation-modal" role="dialog" aria-labelledby="deleteLoanTitle">
+            <h2 id="deleteLoanTitle">Delete loan?</h2>
+            <p>Are you sure you want to delete this loan?</p>
+            <div className="modal-actions">
+              <button className="secondary danger" disabled={isMutating} type="button" onClick={confirmDeleteLoan}>
+                Delete
+              </button>
+              <button className="secondary" disabled={isMutating} type="button" onClick={discardDeleteLoan}>
+                Discard
+              </button>
             </div>
           </div>
         </div>
@@ -2240,7 +2714,7 @@ function HomePage({
         onMouseLeave={() => setIsHeroPaused(false)}
       >
         <div className="home-hero-copy">
-          <p className="eyebrow">Broker App prototype</p>
+          <p className="eyebrow">LobiLend prototype</p>
           <div>
             <h2>Welcome back, {userName}.</h2>
             <p>
@@ -2438,11 +2912,13 @@ function LoanPipelineDetailPanel({
   detail,
   onOpenAction,
   onOpenDetails,
+  onRequestDelete,
   selected,
 }: {
   detail: LoanDetail | null
   onOpenAction: (actionId: string) => void
   onOpenDetails: (loanNumber: string) => void
+  onRequestDelete: (loanNumber: string) => void
   selected: LoanListItem | null
 }) {
   if (!selected) {
@@ -2467,6 +2943,7 @@ function LoanPipelineDetailPanel({
 
       <div className="detail-primary-actions">
         <button className="detail-action" type="button" onClick={() => onOpenDetails(selected.loanNumber)}>Details</button>
+        <button className="secondary danger" type="button" onClick={() => onRequestDelete(selected.loanNumber)}>Delete</button>
       </div>
 
       <dl>
@@ -2533,6 +3010,7 @@ function LoanDetailPage({
   onLoanEditFieldChange,
   onLoanEditSubmit,
   onOpenAction,
+  onRequestDelete,
   selected,
   templates,
 }: {
@@ -2547,6 +3025,7 @@ function LoanDetailPage({
   onLoanEditFieldChange: (field: keyof LoanEditForm, value: string | boolean) => void
   onLoanEditSubmit: (event: FormEvent<HTMLFormElement>) => void
   onOpenAction: (actionId: string) => void
+  onRequestDelete: (loanNumber: string) => void
   selected: LoanListItem | null
   templates: ActionTemplateListItem[]
 }) {
@@ -2563,7 +3042,12 @@ function LoanDetailPage({
           <h2>{borrowerName}</h2>
           <p>{loanNumber || 'Loading loan'} - {detail?.stage ?? selected?.stage ?? 'Loading'}</p>
         </div>
-        <button className="secondary" type="button" onClick={onBack}>Back to pipeline</button>
+        <div className="detail-primary-actions">
+          <button className="secondary danger" disabled={!loanNumber || disabled} type="button" onClick={() => onRequestDelete(loanNumber)}>
+            Delete
+          </button>
+          <button className="secondary" type="button" onClick={onBack}>Back to pipeline</button>
+        </div>
       </div>
 
       <section className="loan-detail-grid">
@@ -2738,7 +3222,7 @@ function LoanDetailPage({
             </label>
             <label>
               Amount
-              <input disabled={disabled} min="0" onChange={(event) => onLoanEditFieldChange('amount', event.target.value)} step="1000" type="number" value={loanEditForm.amount} />
+              <input disabled={disabled} inputMode="decimal" onChange={(event) => onLoanEditFieldChange('amount', event.target.value)} placeholder="425,000.00" value={loanEditForm.amount} />
             </label>
             <label>
               Target close
@@ -2824,6 +3308,240 @@ function LoanDetailPage({
   )
 }
 
+function AuthShell({
+  authError,
+  authMessage,
+  authView,
+  forgotPasswordEmail,
+  isSubmitting,
+  loginForm,
+  registerForm,
+  resetPasswordForm,
+  onAuthViewChange,
+  onConfirmEmail,
+  onForgotPasswordEmailChange,
+  onLoginChange,
+  onRegisterChange,
+  onResetPasswordChange,
+  onSubmitForgotPassword,
+  onSubmitLogin,
+  onSubmitRegister,
+  onSubmitResetPassword,
+}: {
+  authError: string | null
+  authMessage: string | null
+  authView: AuthView
+  forgotPasswordEmail: string
+  isSubmitting: boolean
+  loginForm: LoginFormState
+  registerForm: RegisterFormState
+  resetPasswordForm: ResetPasswordFormState
+  onAuthViewChange: (view: AuthView) => void
+  onConfirmEmail: () => void
+  onForgotPasswordEmailChange: (value: string) => void
+  onLoginChange: (value: LoginFormState | ((current: LoginFormState) => LoginFormState)) => void
+  onRegisterChange: (value: RegisterFormState | ((current: RegisterFormState) => RegisterFormState)) => void
+  onResetPasswordChange: (value: ResetPasswordFormState | ((current: ResetPasswordFormState) => ResetPasswordFormState)) => void
+  onSubmitForgotPassword: (event: FormEvent<HTMLFormElement>) => void
+  onSubmitLogin: (event: FormEvent<HTMLFormElement>) => void
+  onSubmitRegister: (event: FormEvent<HTMLFormElement>) => void
+  onSubmitResetPassword: (event: FormEvent<HTMLFormElement>) => void
+}) {
+  return (
+    <main className="auth-shell">
+      <section className="auth-hero">
+        <button className="brand auth-brand" type="button" onClick={() => onAuthViewChange('login')}>
+          <img alt="LobiLend" src={lobilendLogo} />
+        </button>
+        <div>
+          <p className="eyebrow">Secure workspace</p>
+          <h1>Sign in to keep every loan file moving.</h1>
+          <p>LobiLend keeps borrower, title, realtor, and closing work organized with secure sessions and organization-scoped data.</p>
+        </div>
+      </section>
+
+      <section className="panel auth-panel">
+        {authError && <p className="state-message error">{authError}</p>}
+        {authMessage && <p className="state-message success">{authMessage}</p>}
+
+        {authView === 'login' && (
+          <form onSubmit={onSubmitLogin}>
+            <div>
+              <h2>Log in</h2>
+              <p>Use your confirmed account email and password.</p>
+            </div>
+            <label>
+              Email
+              <input
+                autoComplete="email"
+                onChange={(event) => onLoginChange((current) => ({ ...current, email: event.target.value }))}
+                type="email"
+                value={loginForm.email}
+              />
+            </label>
+            <label>
+              Password
+              <input
+                autoComplete="current-password"
+                onChange={(event) => onLoginChange((current) => ({ ...current, password: event.target.value }))}
+                type="password"
+                value={loginForm.password}
+              />
+            </label>
+            <label className="check-label">
+              <input
+                checked={loginForm.rememberMe}
+                onChange={(event) => onLoginChange((current) => ({ ...current, rememberMe: event.target.checked }))}
+                type="checkbox"
+              />
+              Keep me signed in
+            </label>
+            <button disabled={isSubmitting || !loginForm.email.trim() || !loginForm.password} type="submit">
+              {isSubmitting ? 'Signing in...' : 'Log in'}
+            </button>
+            <div className="auth-switcher">
+              <button type="button" onClick={() => onAuthViewChange('register')}>Create account</button>
+              <button type="button" onClick={() => onAuthViewChange('forgotPassword')}>Forgot password</button>
+            </div>
+          </form>
+        )}
+
+        {authView === 'register' && (
+          <form onSubmit={onSubmitRegister}>
+            <div>
+              <h2>Create account</h2>
+              <p>Registration creates a private organization workspace.</p>
+            </div>
+            <label>
+              Organization
+              <input
+                onChange={(event) => onRegisterChange((current) => ({ ...current, organizationName: event.target.value }))}
+                value={registerForm.organizationName}
+              />
+            </label>
+            <label>
+              Display name
+              <input
+                autoComplete="name"
+                onChange={(event) => onRegisterChange((current) => ({ ...current, displayName: event.target.value }))}
+                value={registerForm.displayName}
+              />
+            </label>
+            <label>
+              Email
+              <input
+                autoComplete="email"
+                onChange={(event) => onRegisterChange((current) => ({ ...current, email: event.target.value }))}
+                type="email"
+                value={registerForm.email}
+              />
+            </label>
+            <label>
+              Password
+              <input
+                autoComplete="new-password"
+                onChange={(event) => onRegisterChange((current) => ({ ...current, password: event.target.value }))}
+                type="password"
+                value={registerForm.password}
+              />
+              <small className="auth-password-hint">
+                Use at least 12 characters with uppercase, lowercase, number, and symbol.
+              </small>
+            </label>
+            <button
+              disabled={isSubmitting || !registerForm.organizationName.trim() || !registerForm.displayName.trim() || !registerForm.email.trim() || !registerForm.password}
+              type="submit"
+            >
+              {isSubmitting ? 'Creating...' : 'Create account'}
+            </button>
+            <div className="auth-switcher">
+              <button type="button" onClick={() => onAuthViewChange('login')}>Back to login</button>
+            </div>
+          </form>
+        )}
+
+        {authView === 'forgotPassword' && (
+          <form onSubmit={onSubmitForgotPassword}>
+            <div>
+              <h2>Reset password</h2>
+              <p>Enter your account email to receive a reset link.</p>
+            </div>
+            <label>
+              Email
+              <input
+                autoComplete="email"
+                onChange={(event) => onForgotPasswordEmailChange(event.target.value)}
+                type="email"
+                value={forgotPasswordEmail}
+              />
+            </label>
+            <button disabled={isSubmitting || !forgotPasswordEmail.trim()} type="submit">
+              {isSubmitting ? 'Sending...' : 'Send reset link'}
+            </button>
+            <button className="secondary" type="button" onClick={() => onAuthViewChange('resetPassword')}>
+              I have a reset link
+            </button>
+            <div className="auth-switcher">
+              <button type="button" onClick={() => onAuthViewChange('login')}>Back to login</button>
+            </div>
+          </form>
+        )}
+
+        {authView === 'resetPassword' && (
+          <form onSubmit={onSubmitResetPassword}>
+            <div>
+              <h2>Choose new password</h2>
+              <p>Use the reset link values and a new secure password.</p>
+            </div>
+            <label>
+              Email
+              <input
+                autoComplete="email"
+                onChange={(event) => onResetPasswordChange((current) => ({ ...current, email: event.target.value }))}
+                type="email"
+                value={resetPasswordForm.email}
+              />
+            </label>
+            <label>
+              Reset token
+              <textarea
+                onChange={(event) => onResetPasswordChange((current) => ({ ...current, token: event.target.value }))}
+                rows={3}
+                value={resetPasswordForm.token}
+              />
+            </label>
+            <label>
+              New password
+              <input
+                autoComplete="new-password"
+                onChange={(event) => onResetPasswordChange((current) => ({ ...current, newPassword: event.target.value }))}
+                type="password"
+                value={resetPasswordForm.newPassword}
+              />
+            </label>
+            <button disabled={isSubmitting || !resetPasswordForm.email.trim() || !resetPasswordForm.token.trim() || !resetPasswordForm.newPassword} type="submit">
+              {isSubmitting ? 'Saving...' : 'Reset password'}
+            </button>
+          </form>
+        )}
+
+        {authView === 'confirmEmail' && (
+          <div className="auth-confirm-box">
+            <h2>Confirm email</h2>
+            <p>Complete confirmation from the link that was sent during registration.</p>
+            <button disabled={isSubmitting} type="button" onClick={onConfirmEmail}>
+              {isSubmitting ? 'Confirming...' : 'Confirm email'}
+            </button>
+            <div className="auth-switcher">
+              <button type="button" onClick={() => onAuthViewChange('login')}>Back to login</button>
+            </div>
+          </div>
+        )}
+      </section>
+    </main>
+  )
+}
+
 function MyAccountPage({
   currentUser,
   onLogOut,
@@ -2862,6 +3580,14 @@ function MyAccountPage({
               <span>Status</span>
               <strong>{currentUser.isActive ? 'Active' : 'Inactive'}</strong>
             </div>
+            <div className="readonly-field">
+              <span>Organization</span>
+              <strong>{currentUser.organizationName}</strong>
+            </div>
+            <div className="readonly-field">
+              <span>Email confirmed</span>
+              <strong>{currentUser.emailConfirmed ? 'Confirmed' : 'Pending'}</strong>
+            </div>
             <div className="readonly-field wide">
               <span>User ID</span>
               <strong>{currentUser.id}</strong>
@@ -2879,29 +3605,45 @@ function AdminTemplatesPage({
   disabled,
   filteredTemplates,
   form,
+  currentUser,
+  isCreatingUser,
   selectedTemplate,
   templateDetail,
+  userCreateForm,
+  userInvitationLinks,
+  users,
   onAddItem,
   onNewTemplate,
   onRemoveItem,
+  onSubmitUser,
   onSelectTemplate,
   onSubmit,
   onUpdateField,
   onUpdateItem,
+  onUpdateUserField,
 }: {
   disabled: boolean
   filteredTemplates: ActionTemplateListItem[]
   form: TemplateFormState
+  currentUser: CurrentUser | null
+  isCreatingUser: boolean
   selectedTemplate: ActionTemplateListItem | null
   templateDetail: ActionTemplateDetail | null
+  userCreateForm: UserCreateFormState
+  userInvitationLinks: { confirmation: string | null, reset: string | null } | null
+  users: UserListItem[]
   onAddItem: () => void
   onNewTemplate: () => void
   onRemoveItem: (index: number) => void
+  onSubmitUser: (event: FormEvent<HTMLFormElement>) => void
   onSelectTemplate: (id: string | null) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onUpdateField: (field: keyof Omit<TemplateFormState, 'items'>, value: string | boolean | null) => void
   onUpdateItem: (index: number, field: keyof TemplateItemForm, value: string) => void
+  onUpdateUserField: (field: keyof UserCreateFormState, value: string) => void
 }) {
+  const canCreateUsers = currentUser?.role === 'Team Lead'
+
   return (
     <section className="content-grid admin-grid">
       <div className="panel template-list-panel">
@@ -3047,6 +3789,84 @@ function AdminTemplatesPage({
           ))}
         </div>
       </form>
+
+      <section className="panel admin-users-panel">
+        <div className="panel-header">
+          <div>
+            <h2>User access</h2>
+            <p>{users.length} team member{users.length === 1 ? '' : 's'}</p>
+          </div>
+        </div>
+
+        <div className="admin-users-grid">
+          <div className="admin-user-list">
+            {users.map((user) => (
+              <article className="admin-user-row" key={user.id}>
+                <span>
+                  <strong>{user.displayName}</strong>
+                  <small>{user.email}</small>
+                </span>
+                <span>
+                  <strong>{user.role}</strong>
+                  <small>{user.emailConfirmed ? 'Email confirmed' : 'Invitation pending'}</small>
+                </span>
+              </article>
+            ))}
+            {users.length === 0 && <p className="state-message">No users found.</p>}
+          </div>
+
+          <form className="admin-user-form" onSubmit={onSubmitUser}>
+            <div>
+              <h3>Invite user</h3>
+              <p>Creates an account in this organization and emails setup links.</p>
+            </div>
+            {!canCreateUsers && (
+              <p className="state-message">Only Team Leads can invite users.</p>
+            )}
+            <div className="form-grid two-column">
+              <label>
+                Display name
+                <input
+                  disabled={!canCreateUsers || isCreatingUser}
+                  onChange={(event) => onUpdateUserField('displayName', event.target.value)}
+                  required
+                  value={userCreateForm.displayName}
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  disabled={!canCreateUsers || isCreatingUser}
+                  onChange={(event) => onUpdateUserField('email', event.target.value)}
+                  required
+                  type="email"
+                  value={userCreateForm.email}
+                />
+              </label>
+              <label>
+                Role
+                <select
+                  disabled={!canCreateUsers || isCreatingUser}
+                  onChange={(event) => onUpdateUserField('role', event.target.value)}
+                  value={userCreateForm.role}
+                >
+                  {userRoles.map((role) => <option key={role}>{role}</option>)}
+                </select>
+              </label>
+            </div>
+            <button disabled={!canCreateUsers || isCreatingUser} type="submit">
+              {isCreatingUser ? 'Sending...' : 'Send invitation'}
+            </button>
+            {userInvitationLinks && (userInvitationLinks.confirmation || userInvitationLinks.reset) && (
+              <div className="debug-link-box">
+                <span>Development links</span>
+                {userInvitationLinks.confirmation && <a href={userInvitationLinks.confirmation}>Confirm email</a>}
+                {userInvitationLinks.reset && <a href={userInvitationLinks.reset}>Set password</a>}
+              </div>
+            )}
+          </form>
+        </div>
+      </section>
     </section>
   )
 }
@@ -3450,10 +4270,9 @@ function CustomerDetailPage({
             Amount
             <input
               disabled={loanDisabled}
-              min="0"
+              inputMode="decimal"
               onChange={(event) => onUpdateLoanField('amount', event.target.value)}
-              step="1000"
-              type="number"
+              placeholder="425,000.00"
               value={addLoanForm.amount}
             />
           </label>
@@ -3799,10 +4618,9 @@ function IntakePage({
             Amount
             <input
               disabled={disabled}
-              min="0"
+              inputMode="decimal"
               onChange={(event) => onUpdateField('amount', event.target.value)}
-              step="1000"
-              type="number"
+              placeholder="425,000.00"
               value={form.amount}
             />
           </label>
@@ -4285,10 +5103,9 @@ function ActionDetailPage({
             Amount
             <input
               disabled={disabled}
-              min="0"
+              inputMode="decimal"
               onChange={(event) => onLoanEditFieldChange('amount', event.target.value)}
-              step="1000"
-              type="number"
+              placeholder="425,000.00"
               value={loanEditForm.amount}
             />
           </label>

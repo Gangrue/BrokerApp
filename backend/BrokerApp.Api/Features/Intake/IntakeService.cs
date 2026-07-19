@@ -1,5 +1,6 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
+using BrokerApp.Api.Features.Auth;
 using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
 using Microsoft.EntityFrameworkCore;
@@ -19,17 +20,20 @@ public sealed class IntakeService : IIntakeService
     private readonly ISystemClock _clock;
     private readonly ILoanFileCreationService _loanFileCreationService;
     private readonly IAuditWriter _auditWriter;
+    private readonly ICurrentUserContext _currentUser;
 
     public IntakeService(
         BrokerAppDbContext dbContext,
         ISystemClock clock,
         ILoanFileCreationService loanFileCreationService,
-        IAuditWriter auditWriter)
+        IAuditWriter auditWriter,
+        ICurrentUserContext currentUser)
     {
         _dbContext = dbContext;
         _clock = clock;
         _loanFileCreationService = loanFileCreationService;
         _auditWriter = auditWriter;
+        _currentUser = currentUser;
     }
 
     public async Task<CreateFileIntakeResponse> CreateFileAsync(
@@ -43,7 +47,7 @@ public sealed class IntakeService : IIntakeService
         var customer = normalizedEmail is null
             ? null
             : await _dbContext.Customers.FirstOrDefaultAsync(
-                item => item.OrganizationId == DevDataIds.OrganizationId
+                item => item.OrganizationId == _currentUser.OrganizationId
                     && item.Status == "Active"
                     && item.Email != null
                     && item.Email.ToLower() == normalizedEmail,
@@ -55,7 +59,7 @@ public sealed class IntakeService : IIntakeService
             customer = new Customer
             {
                 Id = Guid.NewGuid(),
-                OrganizationId = DevDataIds.OrganizationId,
+                OrganizationId = _currentUser.OrganizationId,
                 FirstName = customerInput.FirstName,
                 LastName = customerInput.LastName,
                 Email = customerInput.Email,

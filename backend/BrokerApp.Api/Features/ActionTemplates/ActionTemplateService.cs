@@ -1,6 +1,7 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
 using BrokerApp.Api.Features.Actions;
+using BrokerApp.Api.Features.Auth;
 using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
 using Microsoft.EntityFrameworkCore;
@@ -31,17 +32,20 @@ public sealed class ActionTemplateService : IActionTemplateService
     private readonly ISystemClock _clock;
     private readonly IActionPublicIdGenerator _actionPublicIdGenerator;
     private readonly IAuditWriter _auditWriter;
+    private readonly ICurrentUserContext _currentUser;
 
     public ActionTemplateService(
         BrokerAppDbContext dbContext,
         ISystemClock clock,
         IActionPublicIdGenerator actionPublicIdGenerator,
-        IAuditWriter auditWriter)
+        IAuditWriter auditWriter,
+        ICurrentUserContext currentUser)
     {
         _dbContext = dbContext;
         _clock = clock;
         _actionPublicIdGenerator = actionPublicIdGenerator;
         _auditWriter = auditWriter;
+        _currentUser = currentUser;
     }
 
     public async Task<IReadOnlyCollection<ActionTemplateListItemDto>> GetTemplatesAsync(CancellationToken cancellationToken = default)
@@ -49,7 +53,7 @@ public sealed class ActionTemplateService : IActionTemplateService
         var templates = await _dbContext.ActionTemplates
             .AsNoTracking()
             .Include(template => template.Items)
-            .Where(template => template.OrganizationId == DevDataIds.OrganizationId)
+            .Where(template => template.OrganizationId == _currentUser.OrganizationId)
             .OrderByDescending(template => template.IsActive)
             .ThenBy(template => template.Name)
             .ToListAsync(cancellationToken);
@@ -69,7 +73,7 @@ public sealed class ActionTemplateService : IActionTemplateService
             .AsNoTracking()
             .Include(item => item.Items)
             .SingleOrDefaultAsync(
-                template => template.OrganizationId == DevDataIds.OrganizationId && template.Id == id,
+                template => template.OrganizationId == _currentUser.OrganizationId && template.Id == id,
                 cancellationToken);
 
         return template is null ? null : ToDetailDto(template);
@@ -84,7 +88,7 @@ public sealed class ActionTemplateService : IActionTemplateService
         var template = new ActionTemplate
         {
             Id = Guid.NewGuid(),
-            OrganizationId = DevDataIds.OrganizationId,
+            OrganizationId = _currentUser.OrganizationId,
             Name = input.Name,
             LoanType = input.LoanType,
             Stage = input.Stage,
@@ -117,7 +121,7 @@ public sealed class ActionTemplateService : IActionTemplateService
         var template = await _dbContext.ActionTemplates
             .Include(item => item.Items)
             .SingleOrDefaultAsync(
-                template => template.OrganizationId == DevDataIds.OrganizationId && template.Id == id,
+                template => template.OrganizationId == _currentUser.OrganizationId && template.Id == id,
                 cancellationToken);
 
         if (template is null)
@@ -162,7 +166,7 @@ public sealed class ActionTemplateService : IActionTemplateService
         var loan = await _dbContext.Loans
             .Include(item => item.Actions)
             .SingleOrDefaultAsync(
-                item => item.OrganizationId == DevDataIds.OrganizationId && item.LoanNumber == normalizedLoanNumber,
+                item => item.OrganizationId == _currentUser.OrganizationId && item.LoanNumber == normalizedLoanNumber,
                 cancellationToken);
 
         if (loan is null)
@@ -196,7 +200,7 @@ public sealed class ActionTemplateService : IActionTemplateService
         var template = await _dbContext.ActionTemplates
             .Include(item => item.Items)
             .SingleOrDefaultAsync(
-                item => item.OrganizationId == DevDataIds.OrganizationId && item.Id == templateId,
+                item => item.OrganizationId == _currentUser.OrganizationId && item.Id == templateId,
                 cancellationToken);
 
         if (template is null)
@@ -240,10 +244,10 @@ public sealed class ActionTemplateService : IActionTemplateService
             var action = new LoanAction
             {
                 Id = Guid.NewGuid(),
-                OrganizationId = DevDataIds.OrganizationId,
+                OrganizationId = _currentUser.OrganizationId,
                 LoanId = loan.Id,
                 ActionTemplateItemId = item.First.Id,
-                AssignedUserId = DevDataIds.LoanOfficerId,
+                AssignedUserId = _currentUser.UserId,
                 PublicId = item.Second,
                 Type = "Condition",
                 Section = item.First.Section,
@@ -261,7 +265,7 @@ public sealed class ActionTemplateService : IActionTemplateService
                 Id = Guid.NewGuid(),
                 LoanActionId = action.Id,
                 EventType = ActionEventTypes.Created,
-                ActorUserId = DevDataIds.LoanOfficerId,
+                ActorUserId = _currentUser.UserId,
                 Reason = eventReason,
                 NewValue = template.Name,
                 OccurredAtUtc = now
@@ -289,7 +293,7 @@ public sealed class ActionTemplateService : IActionTemplateService
 
         var name = Require(request.Name, "Template name");
         var duplicateNameExists = await _dbContext.ActionTemplates.AnyAsync(
-            template => template.OrganizationId == DevDataIds.OrganizationId
+            template => template.OrganizationId == _currentUser.OrganizationId
                 && template.Name == name
                 && template.Id != existingTemplateId,
             cancellationToken);
@@ -343,12 +347,12 @@ public sealed class ActionTemplateService : IActionTemplateService
             item.DueOffsetDays);
     }
 
-    private static ActionTemplateItem CreateItem(Guid templateId, ValidTemplateItemInput item)
+    private ActionTemplateItem CreateItem(Guid templateId, ValidTemplateItemInput item)
     {
         return new ActionTemplateItem
         {
             Id = Guid.NewGuid(),
-            OrganizationId = DevDataIds.OrganizationId,
+            OrganizationId = _currentUser.OrganizationId,
             ActionTemplateId = templateId,
             SortOrder = item.SortOrder,
             Section = item.Section,

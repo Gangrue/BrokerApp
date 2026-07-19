@@ -45,4 +45,5 @@ public static class AuditOperations
     public const string Reassigned = "Reassigned";
     public const string CommentAdded = "Comment Added";
     public const string Generated = "Generated";
+    public const string Deleted = "Deleted";
 }

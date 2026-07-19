@@ -1,12 +1,14 @@
 using BrokerApp.Api.Domain;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace BrokerApp.Api.Data;
 
-public sealed class BrokerAppDbContext : DbContext
+public sealed class BrokerAppDbContext : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>
 {
-    private readonly bool _usesInMemoryProvider;
+    private readonly bool _usesDatabaseGeneratedRowVersion;
     private readonly string _providerName;
 
     public BrokerAppDbContext(DbContextOptions<BrokerAppDbContext> options)
@@ -15,13 +17,13 @@ public sealed class BrokerAppDbContext : DbContext
         _providerName = options.Extensions
             .Select(extension => extension.GetType().FullName ?? string.Empty)
             .FirstOrDefault(name => name.Contains("SqlServer", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("Npgsql", StringComparison.OrdinalIgnoreCase)
                 || name.Contains("InMemory", StringComparison.OrdinalIgnoreCase))
             ?? string.Empty;
-        _usesInMemoryProvider = _providerName.Contains("InMemory", StringComparison.OrdinalIgnoreCase);
+        _usesDatabaseGeneratedRowVersion = _providerName.Contains("SqlServer", StringComparison.OrdinalIgnoreCase);
     }
 
     public DbSet<Organization> Organizations => Set<Organization>();
-    public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<Loan> Loans => Set<Loan>();
     public DbSet<LoanAction> LoanActions => Set<LoanAction>();
@@ -38,6 +40,18 @@ public sealed class BrokerAppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.UseOpenIddict<Guid>();
+
+        modelBuilder.Entity<AppUser>().ToTable("Users");
+        modelBuilder.Entity<IdentityRole<Guid>>().ToTable("Roles");
+        modelBuilder.Entity<IdentityUserClaim<Guid>>().ToTable("UserClaims");
+        modelBuilder.Entity<IdentityUserRole<Guid>>().ToTable("UserRoles");
+        modelBuilder.Entity<IdentityUserLogin<Guid>>().ToTable("UserLogins");
+        modelBuilder.Entity<IdentityRoleClaim<Guid>>().ToTable("RoleClaims");
+        modelBuilder.Entity<IdentityUserToken<Guid>>().ToTable("UserTokens");
+
         modelBuilder.Entity<Organization>(entity =>
         {
             entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
@@ -47,15 +61,15 @@ public sealed class BrokerAppDbContext : DbContext
         modelBuilder.Entity<AppUser>(entity =>
         {
             entity.Property(e => e.DisplayName).HasMaxLength(200).IsRequired();
-            entity.Property(e => e.Email).HasMaxLength(320).IsRequired();
+            entity.Property(e => e.Email).HasMaxLength(320);
             entity.Property(e => e.Role).HasMaxLength(100).IsRequired();
-            if (_usesInMemoryProvider)
+            if (_usesDatabaseGeneratedRowVersion)
             {
-                entity.Ignore(e => e.RowVersion);
+                entity.Property(e => e.RowVersion).IsRowVersion();
             }
             else
             {
-                entity.Property(e => e.RowVersion).IsRowVersion();
+                entity.Ignore(e => e.RowVersion);
             }
             entity.HasIndex(e => new { e.OrganizationId, e.Email }).IsUnique();
             entity.HasOne(e => e.Organization)
@@ -71,13 +85,13 @@ public sealed class BrokerAppDbContext : DbContext
             entity.Property(e => e.Email).HasMaxLength(320);
             entity.Property(e => e.Phone).HasMaxLength(40);
             entity.Property(e => e.Status).HasMaxLength(40).IsRequired();
-            if (_usesInMemoryProvider)
+            if (_usesDatabaseGeneratedRowVersion)
             {
-                entity.Ignore(e => e.RowVersion);
+                entity.Property(e => e.RowVersion).IsRowVersion();
             }
             else
             {
-                entity.Property(e => e.RowVersion).IsRowVersion();
+                entity.Ignore(e => e.RowVersion);
             }
             entity.HasIndex(e => new { e.OrganizationId, e.LastName, e.FirstName });
             entity.HasIndex(e => new { e.OrganizationId, e.Email });
@@ -99,13 +113,13 @@ public sealed class BrokerAppDbContext : DbContext
             entity.Property(e => e.TitleContactEmail).HasMaxLength(320);
             entity.Property(e => e.RealtorName).HasMaxLength(200);
             entity.Property(e => e.RealtorEmail).HasMaxLength(320);
-            if (_usesInMemoryProvider)
+            if (_usesDatabaseGeneratedRowVersion)
             {
-                entity.Ignore(e => e.RowVersion);
+                entity.Property(e => e.RowVersion).IsRowVersion();
             }
             else
             {
-                entity.Property(e => e.RowVersion).IsRowVersion();
+                entity.Ignore(e => e.RowVersion);
             }
             entity.HasIndex(e => new { e.OrganizationId, e.LoanNumber }).IsUnique();
             entity.HasOne(e => e.Organization)
@@ -131,13 +145,13 @@ public sealed class BrokerAppDbContext : DbContext
             entity.Property(e => e.Description).HasMaxLength(1000);
             entity.Property(e => e.WorkflowStatus).HasMaxLength(40).IsRequired();
             entity.Property(e => e.Priority).HasMaxLength(40).IsRequired();
-            if (_usesInMemoryProvider)
+            if (_usesDatabaseGeneratedRowVersion)
             {
-                entity.Ignore(e => e.RowVersion);
+                entity.Property(e => e.RowVersion).IsRowVersion();
             }
             else
             {
-                entity.Property(e => e.RowVersion).IsRowVersion();
+                entity.Ignore(e => e.RowVersion);
             }
             entity.HasIndex(e => new { e.OrganizationId, e.PublicId }).IsUnique();
             entity.HasIndex(e => new { e.OrganizationId, e.AssignedUserId, e.DueDate, e.Priority, e.WorkflowStatus });
@@ -164,13 +178,13 @@ public sealed class BrokerAppDbContext : DbContext
             entity.Property(e => e.Name).HasMaxLength(160).IsRequired();
             entity.Property(e => e.LoanType).HasMaxLength(80).IsRequired();
             entity.Property(e => e.Stage).HasMaxLength(80).IsRequired();
-            if (_usesInMemoryProvider)
+            if (_usesDatabaseGeneratedRowVersion)
             {
-                entity.Ignore(e => e.RowVersion);
+                entity.Property(e => e.RowVersion).IsRowVersion();
             }
             else
             {
-                entity.Property(e => e.RowVersion).IsRowVersion();
+                entity.Ignore(e => e.RowVersion);
             }
             entity.HasIndex(e => new { e.OrganizationId, e.Name }).IsUnique();
             entity.HasIndex(e => new { e.OrganizationId, e.IsActive, e.LoanType, e.Stage });

@@ -1,5 +1,6 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
+using BrokerApp.Api.Features.Auth;
 using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
 using BrokerApp.Api.Features.Intake;
@@ -21,17 +22,20 @@ public sealed class CustomerService : ICustomerService
     private readonly IAuditWriter _auditWriter;
     private readonly ISystemClock _clock;
     private readonly ILoanFileCreationService _loanFileCreationService;
+    private readonly ICurrentUserContext _currentUser;
 
     public CustomerService(
         BrokerAppDbContext dbContext,
         IAuditWriter auditWriter,
         ISystemClock clock,
-        ILoanFileCreationService loanFileCreationService)
+        ILoanFileCreationService loanFileCreationService,
+        ICurrentUserContext currentUser)
     {
         _dbContext = dbContext;
         _auditWriter = auditWriter;
         _clock = clock;
         _loanFileCreationService = loanFileCreationService;
+        _currentUser = currentUser;
     }
 
     public async Task<IReadOnlyCollection<CustomerListItemDto>> GetCustomersAsync(CancellationToken cancellationToken = default)
@@ -41,7 +45,7 @@ public sealed class CustomerService : ICustomerService
             .AsSplitQuery()
             .Include(customer => customer.Loans)
                 .ThenInclude(loan => loan.Actions)
-            .Where(customer => customer.OrganizationId == DevDataIds.OrganizationId)
+            .Where(customer => customer.OrganizationId == _currentUser.OrganizationId)
             .OrderBy(customer => customer.LastName)
             .ThenBy(customer => customer.FirstName)
             .ToListAsync(cancellationToken);
@@ -79,7 +83,7 @@ public sealed class CustomerService : ICustomerService
             .Include(item => item.Loans)
                 .ThenInclude(loan => loan.OwnerUser)
             .SingleOrDefaultAsync(
-                item => item.OrganizationId == DevDataIds.OrganizationId && item.Id == id,
+                item => item.OrganizationId == _currentUser.OrganizationId && item.Id == id,
                 cancellationToken);
 
         if (customer is null)
@@ -157,7 +161,7 @@ public sealed class CustomerService : ICustomerService
         }
 
         var customer = await _dbContext.Customers.SingleOrDefaultAsync(
-            item => item.OrganizationId == DevDataIds.OrganizationId && item.Id == id,
+            item => item.OrganizationId == _currentUser.OrganizationId && item.Id == id,
             cancellationToken);
 
         if (customer is null)
@@ -190,7 +194,7 @@ public sealed class CustomerService : ICustomerService
     {
         var input = ValidateUpdate(request);
         var customer = await _dbContext.Customers.SingleOrDefaultAsync(
-            item => item.OrganizationId == DevDataIds.OrganizationId && item.Id == id,
+            item => item.OrganizationId == _currentUser.OrganizationId && item.Id == id,
             cancellationToken);
 
         if (customer is null)

@@ -2,6 +2,7 @@ using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
 using BrokerApp.Api.Features.Actions;
 using BrokerApp.Api.Features.ActionTemplates;
+using BrokerApp.Api.Features.Auth;
 using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
 using Microsoft.EntityFrameworkCore;
@@ -36,19 +37,22 @@ public sealed class LoanFileCreationService : ILoanFileCreationService
     private readonly IActionPublicIdGenerator _actionPublicIdGenerator;
     private readonly IActionTemplateService _actionTemplateService;
     private readonly IAuditWriter _auditWriter;
+    private readonly ICurrentUserContext _currentUser;
 
     public LoanFileCreationService(
         BrokerAppDbContext dbContext,
         ISystemClock clock,
         IActionPublicIdGenerator actionPublicIdGenerator,
         IActionTemplateService actionTemplateService,
-        IAuditWriter auditWriter)
+        IAuditWriter auditWriter,
+        ICurrentUserContext currentUser)
     {
         _dbContext = dbContext;
         _clock = clock;
         _actionPublicIdGenerator = actionPublicIdGenerator;
         _actionTemplateService = actionTemplateService;
         _auditWriter = auditWriter;
+        _currentUser = currentUser;
     }
 
     public async Task<LoanFileCreationResult> CreateLoanForCustomerAsync(
@@ -63,7 +67,7 @@ public sealed class LoanFileCreationService : ILoanFileCreationService
         var now = _clock.UtcNow;
 
         if (await _dbContext.Loans.AnyAsync(
-            loan => loan.OrganizationId == DevDataIds.OrganizationId && loan.LoanNumber == loanInput.LoanNumber,
+            loan => loan.OrganizationId == _currentUser.OrganizationId && loan.LoanNumber == loanInput.LoanNumber,
             cancellationToken))
         {
             throw new IntakeValidationException($"Loan number {loanInput.LoanNumber} already exists.");
@@ -72,9 +76,9 @@ public sealed class LoanFileCreationService : ILoanFileCreationService
         var loan = new Loan
         {
             Id = Guid.NewGuid(),
-            OrganizationId = DevDataIds.OrganizationId,
+            OrganizationId = _currentUser.OrganizationId,
             CustomerId = customer.Id,
-            OwnerUserId = DevDataIds.LoanOfficerId,
+            OwnerUserId = _currentUser.UserId,
             LoanNumber = loanInput.LoanNumber,
             Type = loanInput.Type,
             Stage = loanInput.Stage,
@@ -107,9 +111,9 @@ public sealed class LoanFileCreationService : ILoanFileCreationService
             var action = new LoanAction
             {
                 Id = Guid.NewGuid(),
-                OrganizationId = DevDataIds.OrganizationId,
+                OrganizationId = _currentUser.OrganizationId,
                 LoanId = loan.Id,
-                AssignedUserId = DevDataIds.LoanOfficerId,
+                AssignedUserId = _currentUser.UserId,
                 PublicId = actionInput.Second,
                 Type = "Condition",
                 Section = actionInput.First.Section,
@@ -126,7 +130,7 @@ public sealed class LoanFileCreationService : ILoanFileCreationService
                 Id = Guid.NewGuid(),
                 LoanActionId = action.Id,
                 EventType = ActionEventTypes.Created,
-                ActorUserId = DevDataIds.LoanOfficerId,
+                ActorUserId = _currentUser.UserId,
                 Reason = actionEventReason,
                 OccurredAtUtc = now
             });
@@ -155,9 +159,9 @@ public sealed class LoanFileCreationService : ILoanFileCreationService
             _dbContext.LoanNotes.Add(new LoanNote
             {
                 Id = Guid.NewGuid(),
-                OrganizationId = DevDataIds.OrganizationId,
+                OrganizationId = _currentUser.OrganizationId,
                 LoanId = loan.Id,
-                CreatedByUserId = DevDataIds.LoanOfficerId,
+                CreatedByUserId = _currentUser.UserId,
                 Body = initialNote,
                 CreatedAtUtc = now
             });
