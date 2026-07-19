@@ -101,7 +101,8 @@ public sealed class UserServiceTests
         var today = new DateOnly(2026, 7, 17);
         await using var dbContext = CreateDbContext();
         await DashboardTestData.SeedAsync(dbContext, today);
-        var service = CreateService(dbContext, TestCurrentUserContext.TeamLead, today: today);
+        var emailSender = new TestAuthEmailSender();
+        var service = CreateService(dbContext, TestCurrentUserContext.TeamLead, emailSender, today);
         var created = await service.CreateUserAsync(new CreateUserRequest(
             "Pending Processor",
             "pending.processor@example.test",
@@ -118,6 +119,7 @@ public sealed class UserServiceTests
         Assert.Contains(dbContext.AuditEvents, audit => audit.EntityType == "User"
             && audit.EntityId == created.User.Id.ToString()
             && audit.ChangedFields == "User re-enabled.");
+        Assert.Contains(emailSender.SentReEnabledNotices, notice => notice == "pending.processor@example.test|http://127.0.0.1:5173/login");
     }
 
     [Fact]
@@ -130,6 +132,30 @@ public sealed class UserServiceTests
 
         await Assert.ThrowsAsync<UserValidationException>(() =>
             service.SetUserActiveAsync(DevDataIds.TeamLeadId, false));
+    }
+
+    [Fact]
+    public async Task ResendInvitationAsync_SendsFreshPendingInvitation()
+    {
+        var today = new DateOnly(2026, 7, 17);
+        await using var dbContext = CreateDbContext();
+        await DashboardTestData.SeedAsync(dbContext, today);
+        var emailSender = new TestAuthEmailSender();
+        var service = CreateService(dbContext, TestCurrentUserContext.TeamLead, emailSender, today);
+        var created = await service.CreateUserAsync(new CreateUserRequest(
+            "Pending Processor",
+            "pending.processor@example.test",
+            UserRoles.LoanOfficer));
+
+        var resent = await service.ResendInvitationAsync(created.User.Id);
+
+        Assert.Equal(created.User.Id, resent.User.Id);
+        Assert.NotNull(resent.ConfirmationDebugLink);
+        Assert.NotNull(resent.PasswordResetDebugLink);
+        Assert.Equal(2, emailSender.SentInvitations.Count);
+        Assert.Contains(dbContext.AuditEvents, audit => audit.EntityType == "User"
+            && audit.EntityId == created.User.Id.ToString()
+            && audit.ChangedFields == "Invitation resent.");
     }
 
     private static BrokerAppDbContext CreateDbContext()

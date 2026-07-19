@@ -11,6 +11,7 @@ public interface IAuthEmailSender
     Task SendEmailConfirmationAsync(AppUser user, string confirmationLink, CancellationToken cancellationToken);
     Task SendPasswordResetAsync(AppUser user, string resetLink, CancellationToken cancellationToken);
     Task SendUserInvitationAsync(AppUser user, string confirmationLink, string resetLink, CancellationToken cancellationToken);
+    Task SendUserReEnabledAsync(AppUser user, string loginLink, CancellationToken cancellationToken);
 }
 
 public sealed record AuthEmailContent(string Subject, string TextBody, string HtmlBody);
@@ -56,6 +57,19 @@ public static class AuthEmailTemplates
             $"Hi {DisplayName(user)},\n\nYou have been invited to join a LobiLend workspace.\n\nFirst confirm your email:\n{confirmationLink}\n\nThen set your password:\n{resetLink}\n\nThis invitation was sent by a LobiLend workspace admin.",
             "Set password",
             resetLink);
+    }
+
+    public static AuthEmailContent UserReEnabled(AppUser user, string loginLink, IConfiguration configuration)
+    {
+        return Build(
+            configuration,
+            "Your LobiLend access was re-enabled",
+            "Your access is active again",
+            "Your LobiLend workspace access has been re-enabled. You can sign in and continue working your loan files.",
+            "Open LobiLend",
+            loginLink,
+            "This notice was sent because a LobiLend workspace admin re-enabled your account.",
+            $"Hi {DisplayName(user)},\n\nYour LobiLend workspace access has been re-enabled.\n\nSign in here:\n{loginLink}\n\nThis notice was sent because a LobiLend workspace admin re-enabled your account.");
     }
 
     private static AuthEmailContent Build(
@@ -205,6 +219,13 @@ public sealed class DevelopmentAuthEmailSender : IAuthEmailSender
 
         return Task.CompletedTask;
     }
+
+    public Task SendUserReEnabledAsync(AppUser user, string loginLink, CancellationToken cancellationToken)
+    {
+        _logger.LogWarning("Development user re-enabled notice for {Email}. Login: {LoginLink}", user.Email, loginLink);
+
+        return Task.CompletedTask;
+    }
 }
 
 public sealed class SmtpAuthEmailSender : IAuthEmailSender
@@ -229,6 +250,11 @@ public sealed class SmtpAuthEmailSender : IAuthEmailSender
     public Task SendUserInvitationAsync(AppUser user, string confirmationLink, string resetLink, CancellationToken cancellationToken)
     {
         return SendAsync(user.Email ?? string.Empty, AuthEmailTemplates.UserInvitation(user, confirmationLink, resetLink, _configuration), cancellationToken);
+    }
+
+    public Task SendUserReEnabledAsync(AppUser user, string loginLink, CancellationToken cancellationToken)
+    {
+        return SendAsync(user.Email ?? string.Empty, AuthEmailTemplates.UserReEnabled(user, loginLink, _configuration), cancellationToken);
     }
 
     private async Task SendAsync(string recipient, AuthEmailContent content, CancellationToken cancellationToken)
@@ -306,6 +332,11 @@ public sealed class MailgunAuthEmailSender : IAuthEmailSender
         return SendAsync(user.Email ?? string.Empty, AuthEmailTemplates.UserInvitation(user, confirmationLink, resetLink, _configuration), cancellationToken);
     }
 
+    public Task SendUserReEnabledAsync(AppUser user, string loginLink, CancellationToken cancellationToken)
+    {
+        return SendAsync(user.Email ?? string.Empty, AuthEmailTemplates.UserReEnabled(user, loginLink, _configuration), cancellationToken);
+    }
+
     private async Task SendAsync(string recipient, AuthEmailContent content, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(recipient))
@@ -368,6 +399,11 @@ public sealed class MissingProductionAuthEmailSender : IAuthEmailSender
     }
 
     public Task SendUserInvitationAsync(AppUser user, string confirmationLink, string resetLink, CancellationToken cancellationToken)
+    {
+        throw new InvalidOperationException("Production email delivery is not configured.");
+    }
+
+    public Task SendUserReEnabledAsync(AppUser user, string loginLink, CancellationToken cancellationToken)
     {
         throw new InvalidOperationException("Production email delivery is not configured.");
     }

@@ -14,6 +14,7 @@ public interface IUserService
     Task<IReadOnlyCollection<UserListItemDto>> GetUsersAsync(CancellationToken cancellationToken = default);
     Task<CurrentUserDto?> GetCurrentUserAsync(CancellationToken cancellationToken = default);
     Task<CreateUserResponseDto> CreateUserAsync(CreateUserRequest request, CancellationToken cancellationToken = default);
+    Task<ResendUserInvitationResponseDto> ResendInvitationAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<UserListItemDto> SetUserActiveAsync(Guid userId, bool isActive, CancellationToken cancellationToken = default);
 }
 
@@ -159,6 +160,7 @@ public sealed class UserService : IUserService
         }
 
         user.IsActive = isActive;
+        var loginLink = isActive ? BuildFrontendLink("login") : string.Empty;
         _auditWriter.Record(
             "User",
             user.Id.ToString(),
@@ -167,7 +169,50 @@ public sealed class UserService : IUserService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        if (isActive)
+        {
+            await _emailSender.SendUserReEnabledAsync(user, loginLink, cancellationToken);
+        }
+
         return ToListItem(user);
+    }
+
+    public async Task<ResendUserInvitationResponseDto> ResendInvitationAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        if (_currentUser.Role != UserRoles.TeamLead)
+        {
+            throw new UnauthorizedAccessException("Only Team Leads can manage users.");
+        }
+
+        var user = await _dbContext.Users
+            .Where(item => item.OrganizationId == _currentUser.OrganizationId && item.Id == userId)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new UserValidationException("User was not found.");
+
+        if (!user.IsActive)
+        {
+            throw new UserValidationException("Re-enable this user before resending setup links.");
+        }
+
+        if (user.EmailConfirmed)
+        {
+            throw new UserValidationException("Only pending invitations can be resent.");
+        }
+
+        var links = await CreateInvitationLinksAsync(user);
+        await _emailSender.SendUserInvitationAsync(user, links.ConfirmationLink, links.PasswordResetLink, cancellationToken);
+
+        _auditWriter.Record(
+            "User",
+            user.Id.ToString(),
+            AuditOperations.Updated,
+            "Invitation resent.");
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new ResendUserInvitationResponseDto(
+            ToListItem(user),
+            _environment.IsDevelopment() ? links.ConfirmationLink : null,
+            _environment.IsDevelopment() ? links.PasswordResetLink : null);
     }
 
     private async Task<UserInvitationLinks> CreateInvitationLinksAsync(AppUser user)
@@ -188,7 +233,9 @@ public sealed class UserService : IUserService
         var query = string.Join("&", values.Select(value =>
             $"{UrlEncoder.Default.Encode(value.Name)}={UrlEncoder.Default.Encode(value.Value)}"));
 
-        return $"{frontendBaseUrl}/{path.TrimStart('/')}?{query}";
+        return string.IsNullOrWhiteSpace(query)
+            ? $"{frontendBaseUrl}/{path.TrimStart('/')}"
+            : $"{frontendBaseUrl}/{path.TrimStart('/')}?{query}";
     }
 
     private static string NormalizeRole(string? role)

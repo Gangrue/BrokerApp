@@ -28,6 +28,11 @@ public sealed record CreateUserResponseDto(
     string? ConfirmationDebugLink,
     string? PasswordResetDebugLink);
 
+public sealed record ResendUserInvitationResponseDto(
+    UserListItemDto User,
+    string? ConfirmationDebugLink,
+    string? PasswordResetDebugLink);
+
 public sealed record UpdateUserStatusRequest(
     bool IsActive);
 

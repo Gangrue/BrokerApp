@@ -57,4 +57,18 @@ public sealed class UsersController : ControllerBase
             return BadRequest(new { message = exception.Message });
         }
     }
+
+    [Authorize(Roles = UserRoles.TeamLead)]
+    [HttpPost("{userId:guid}/resend-invitation")]
+    public async Task<ActionResult<ResendUserInvitationResponseDto>> ResendInvitation(Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _userService.ResendInvitationAsync(userId, cancellationToken));
+        }
+        catch (UserValidationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
 }

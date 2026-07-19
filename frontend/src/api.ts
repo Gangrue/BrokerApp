@@ -394,6 +394,12 @@ export type CreateUserResponse = {
   passwordResetDebugLink: string | null
 }
 
+export type ResendUserInvitationResponse = {
+  user: UserListItem
+  confirmationDebugLink: string | null
+  passwordResetDebugLink: string | null
+}
+
 export type UpdateUserStatusRequest = {
   isActive: boolean
 }
@@ -654,6 +660,10 @@ export function createUser(request: CreateUserRequest) {
 
 export function updateUserStatus(id: string, request: UpdateUserStatusRequest) {
   return putJson<UserListItem>(`/api/v1/users/${encodeURIComponent(id)}/status`, request)
+}
+
+export function resendUserInvitation(id: string) {
+  return postJson<ResendUserInvitationResponse>(`/api/v1/users/${encodeURIComponent(id)}/resend-invitation`, {})
 }
 
 export function getCurrentUser() {

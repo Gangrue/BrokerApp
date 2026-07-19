@@ -29,6 +29,7 @@ import {
   logout,
   reassignAction,
   register,
+  resendUserInvitation,
   resetPassword,
   rescheduleAction,
   updateActionTemplate,
@@ -57,7 +58,7 @@ import familyImage from './assets/FamilyImage.png'
 import piggyImage from './assets/PiggyImage.webp'
 import './App.css'
 
-type WorkspaceView = 'home' | 'dashboard' | 'actionDetail' | 'loans' | 'loanDetail' | 'customers' | 'customerDetail' | 'reports' | 'admin' | 'account' | 'intake'
+type WorkspaceView = 'home' | 'dashboard' | 'actionDetail' | 'loans' | 'loanDetail' | 'customers' | 'customerDetail' | 'reports' | 'admin' | 'account' | 'contact' | 'faq' | 'intake'
 type AuthView = 'login' | 'register' | 'forgotPassword' | 'resetPassword' | 'confirmEmail'
 type QueueFilter = 'all' | 'overdue' | 'today' | 'high'
 type DashboardSpotlightFilter = 'overdue' | 'today' | 'upcoming' | 'open' | 'closing'
@@ -643,6 +644,7 @@ function App() {
   const [busyMessage, setBusyMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
+  const [isWorkflowMessageDismissing, setIsWorkflowMessageDismissing] = useState(false)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [actionPage, setActionPage] = useState(0)
   const [customerPage, setCustomerPage] = useState(0)
@@ -1092,6 +1094,32 @@ function App() {
   }, [queueFilter, dashboard.openActions.length])
 
   useEffect(() => {
+    if (!workflowMessage) {
+      setIsWorkflowMessageDismissing(false)
+      return undefined
+    }
+
+    setIsWorkflowMessageDismissing(false)
+    const fadeTimerId = window.setTimeout(() => setIsWorkflowMessageDismissing(true), 5000)
+    const clearTimerId = window.setTimeout(() => setWorkflowMessage(null), 7000)
+
+    return () => {
+      window.clearTimeout(fadeTimerId)
+      window.clearTimeout(clearTimerId)
+    }
+  }, [workflowMessage])
+
+  useEffect(() => {
+    if (!workflowMessage || !isWorkflowMessageDismissing) {
+      return undefined
+    }
+
+    const clearTimerId = window.setTimeout(() => setWorkflowMessage(null), 2000)
+
+    return () => window.clearTimeout(clearTimerId)
+  }, [isWorkflowMessageDismissing, workflowMessage])
+
+  useEffect(() => {
     setCustomerPage(0)
   }, [customers.length])
 
@@ -1192,6 +1220,14 @@ function App() {
     })
   }
 
+  function openFooterView(nextView: WorkspaceView) {
+    navigateWithUnsavedGuard(() => {
+      setSearchTerm('')
+      setView(nextView)
+      scrollWorkspaceToTop()
+    })
+  }
+
   function flashDashboardPanel(panel: DashboardPanelFlash) {
     setDashboardPanelFlash(null)
     window.setTimeout(() => setDashboardPanelFlash(panel), 0)
@@ -1224,15 +1260,30 @@ function App() {
   }
 
   function openDashboardAction(actionId: string) {
+    const actionIndex = filteredActions.findIndex((action) => action.id === actionId)
+
+    if (actionIndex < 0 && dashboard.openActions.some((action) => action.id === actionId)) {
+      setQueueFilter('all')
+      setActionPage(pageForIndex(dashboard.openActions.findIndex((action) => action.id === actionId)))
+    } else {
+      setActionPage(pageForIndex(actionIndex))
+    }
+
     setSelectedActionId(actionId)
-    setActionPage(pageForIndex(filteredActions.findIndex((action) => action.id === actionId)))
     setView('dashboard')
     scrollWorkspaceItemIntoView('action', actionId)
   }
 
   function openDashboardLoanAction(loanNumber: string) {
-    const action = filteredActions.find((item) => item.loanNumber === loanNumber)
-      ?? dashboard.openActions.find((item) => item.loanNumber === loanNumber)
+    const bucketByFilter: Partial<Record<DashboardSpotlightFilter, string>> = {
+      overdue: 'Overdue',
+      today: 'Due Today',
+      upcoming: 'Upcoming',
+    }
+    const targetBucket = bucketByFilter[dashboardSpotlightFilter]
+    const loanActions = dashboard.openActions.filter((item) => item.loanNumber === loanNumber)
+    const action = loanActions.find((item) => !targetBucket || item.bucket === targetBucket)
+      ?? loanActions[0]
 
     if (action) {
       openDashboardAction(action.id)
@@ -1240,6 +1291,36 @@ function App() {
     }
 
     setView('dashboard')
+    scrollWorkspaceToTop()
+  }
+
+  function openReportActivity(activity: ReportSummary['recentActivity'][number]) {
+    const entityType = activity.entityType.toLowerCase()
+
+    if (entityType.includes('loanaction') || entityType.includes('action')) {
+      openDashboardAction(activity.entityId)
+      return
+    }
+
+    if (entityType.includes('loan')) {
+      openLoanPipeline(activity.entityId)
+      return
+    }
+
+    if (entityType.includes('customer')) {
+      setSelectedCustomerId(activity.entityId)
+      setView('customers')
+      scrollWorkspaceItemIntoView('customer', activity.entityId)
+      return
+    }
+
+    if (entityType.includes('template') || entityType.includes('user')) {
+      setView('admin')
+      scrollWorkspaceToTop()
+      return
+    }
+
+    setView('reports')
     scrollWorkspaceToTop()
   }
 
@@ -1998,15 +2079,38 @@ function App() {
     try {
       const updated = await updateUserStatus(user.id, { isActive })
       setUsers(await getUsers())
+      setUserInvitationLinks(null)
       setWorkflowMessage(
         isActive
-          ? `${updated.displayName} re-enabled.`
+          ? `${updated.displayName} re-enabled and notified.`
           : user.emailConfirmed
             ? `${updated.displayName} removed.`
             : `${updated.displayName} invitation cancelled.`,
       )
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'User status update failed')
+    } finally {
+      setBusyMessage(null)
+      setIsMutating(false)
+    }
+  }
+
+  async function resendInvitation(user: UserListItem) {
+    setIsMutating(true)
+    setBusyMessage('Resending invitation...')
+    setWorkflowMessage(null)
+    setError(null)
+
+    try {
+      const response = await resendUserInvitation(user.id)
+      setUsers(await getUsers())
+      setUserInvitationLinks({
+        confirmation: response.confirmationDebugLink,
+        reset: response.passwordResetDebugLink,
+      })
+      setWorkflowMessage(`${response.user.displayName} invitation resent.`)
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Invitation resend failed')
     } finally {
       setBusyMessage(null)
       setIsMutating(false)
@@ -2282,9 +2386,6 @@ function App() {
           </button>
         </nav>
         <div className="sidebar-footer">
-          <div className="sidebar-summary">
-            <strong>{dashboard.overdueCount === 0 ? 'On track' : `${dashboard.overdueCount} overdue`}</strong>
-          </div>
           <button className="logout-button" type="button" onClick={logOutSession}>
             Log out
           </button>
@@ -2306,6 +2407,8 @@ function App() {
             {view === 'reports' && 'Reports'}
             {view === 'admin' && 'Admin templates'}
             {view === 'account' && 'My Account'}
+            {view === 'contact' && 'Contact'}
+            {view === 'faq' && 'FAQ'}
             {view === 'intake' && 'New file intake'}
             </h1>
           </div>
@@ -2328,7 +2431,7 @@ function App() {
           </div>
         </header>
 
-        {view !== 'home' && view !== 'intake' && view !== 'account' && view !== 'admin' && view !== 'loanDetail' && view !== 'customerDetail' && view !== 'actionDetail' && (
+        {view !== 'home' && view !== 'intake' && view !== 'account' && view !== 'contact' && view !== 'faq' && view !== 'admin' && view !== 'loanDetail' && view !== 'customerDetail' && view !== 'actionDetail' && (
           <section className="metrics" aria-label="Action summary">
             <button className="metric-card metric-overdue" type="button" onClick={() => openDashboardSpotlight('overdue')}>
               <span>Overdue</span>
@@ -2363,7 +2466,15 @@ function App() {
           </section>
         )}
 
-        {workflowMessage && <p className="state-message success">{workflowMessage}</p>}
+        {workflowMessage && (
+          <button
+            className={`state-message success workflow-toast ${isWorkflowMessageDismissing ? 'dismissing' : ''}`}
+            type="button"
+            onClick={() => setIsWorkflowMessageDismissing(true)}
+          >
+            {workflowMessage}
+          </button>
+        )}
 
         {view === 'intake' ? (
           <IntakePage
@@ -2397,6 +2508,7 @@ function App() {
               setSelectedLoanNumber(null)
               setView('loans')
             }}
+            onOpenActivity={openReportActivity}
             recentActivity={reportSummary.recentActivity}
             templateCount={templates.length}
           />
@@ -2663,6 +2775,7 @@ function App() {
         ) : view === 'reports' ? (
           <ReportsPage
             key={reportsAnimationKey}
+            onOpenActivity={openReportActivity}
             onOpenAction={openDashboardAction}
             onOpenLoan={(loanNumber) => {
               const actionId = dashboard.openActions.find((action) => action.loanNumber === loanNumber)?.id
@@ -2677,6 +2790,10 @@ function App() {
           />
         ) : view === 'account' ? (
           <MyAccountPage currentUser={currentUser} onLogOut={logOutSession} />
+        ) : view === 'contact' ? (
+          <ContactPage />
+        ) : view === 'faq' ? (
+          <FaqPage />
         ) : view === 'admin' ? (
           <AdminTemplatesPage
             disabled={isSavingTemplate}
@@ -2692,6 +2809,7 @@ function App() {
             onAddItem={addTemplateItem}
             onChangeUserStatus={changeUserActiveStatus}
             onNewTemplate={startNewTemplate}
+            onResendInvitation={resendInvitation}
             onRemoveItem={removeTemplateItem}
             onSubmitUser={submitUserCreate}
             onSelectTemplate={setSelectedTemplateId}
@@ -2769,6 +2887,12 @@ function App() {
             )}
           </section>
         )}
+        <WorkspaceFooter
+          onOpenAccount={() => openFooterView('account')}
+          onOpenContact={() => openFooterView('contact')}
+          onOpenFaq={() => openFooterView('faq')}
+          onSignOut={logOutSession}
+        />
       </section>
       {pendingNavigation && (
         <div className="modal-backdrop" role="presentation">
@@ -2924,6 +3048,7 @@ function HomePage({
   onOpenDashboard,
   onOpenIntake,
   onOpenLoans,
+  onOpenActivity,
   recentActivity,
   templateCount,
 }: {
@@ -2936,6 +3061,7 @@ function HomePage({
   onOpenDashboard: () => void
   onOpenIntake: () => void
   onOpenLoans: () => void
+  onOpenActivity: (activity: ReportSummary['recentActivity'][number]) => void
   recentActivity: ReportSummary['recentActivity']
   templateCount: number
 }) {
@@ -2982,7 +3108,13 @@ function HomePage({
         </div>
 
         <div className="home-hero-carousel" aria-live="polite">
-          <img alt={heroSlide.alt} src={heroSlide.image} />
+          <button
+            className="home-hero-carousel-image"
+            type="button"
+            onClick={() => setHeroSlideIndex((current) => (current + 1) % homeHeroSlides.length)}
+          >
+            <img alt={heroSlide.alt} src={heroSlide.image} />
+          </button>
           <div className="home-hero-caption">
             <span>Prototype focus</span>
             <h3>{heroSlide.title}</h3>
@@ -3073,7 +3205,7 @@ function HomePage({
         </div>
         <div className="activity-list">
           {latestActivity.map((activity) => (
-            <div className="activity-row" key={activity.id}>
+            <button className="activity-row" key={activity.id} type="button" onClick={() => onOpenActivity(activity)}>
               <span>
                 <strong>{activity.operation}</strong>
                 <small>{activity.entityType} {activity.entityId}</small>
@@ -3083,7 +3215,7 @@ function HomePage({
                 <small>{formatDateTime(activity.occurredAtUtc)}</small>
               </span>
               <p>{activity.changedFields}</p>
-            </div>
+            </button>
           ))}
           {latestActivity.length === 0 && <p className="state-message">No recent activity yet.</p>}
         </div>
@@ -3659,6 +3791,27 @@ function GlobalBusyOverlay({ message }: { message: string }) {
   )
 }
 
+function WorkspaceFooter({
+  onOpenAccount,
+  onOpenContact,
+  onOpenFaq,
+  onSignOut,
+}: {
+  onOpenAccount: () => void
+  onOpenContact: () => void
+  onOpenFaq: () => void
+  onSignOut: () => void
+}) {
+  return (
+    <footer className="workspace-footer">
+      <button type="button" onClick={onOpenContact}>Contact</button>
+      <button type="button" onClick={onOpenFaq}>FAQ</button>
+      <button type="button" onClick={onOpenAccount}>Account Page</button>
+      <button type="button" onClick={onSignOut}>Sign Out</button>
+    </footer>
+  )
+}
+
 function AuthShell({
   authError,
   authMessage,
@@ -3703,8 +3856,8 @@ function AuthShell({
       <section className="auth-hero">
         <div className="auth-brand">
           <img alt="LobiLend" src={brandLogoAndText} />
-          <h1>Sign in to keep every loan file moving.</h1>
-          <p>LobiLend keeps borrower, title, realtor, and closing work organized with secure sessions and organization-scoped data.</p>
+          <h1>Keep every loan file moving.</h1>
+          <p>We have <b>Loan offices best interest</b> in mind. Organizing customer accounts has never been easier.</p>
         </div>
       </section>
 
@@ -3716,7 +3869,6 @@ function AuthShell({
           <form onSubmit={onSubmitLogin}>
             <div>
               <h2>Log in</h2>
-              <p>Use your confirmed account email and password.</p>
             </div>
             <label>
               Email
@@ -3890,6 +4042,46 @@ function AuthShell({
   )
 }
 
+function ContactPage() {
+  return (
+    <section className="support-page">
+      <div className="panel support-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Contact</h2>
+            <p>Support details for the prototype workspace</p>
+          </div>
+        </div>
+        <div className="support-copy">
+          <p><strong>Email</strong><span>support@lobilend.com</span></p>
+          <p><strong>Response time</strong><span>Most requests are reviewed within one business day.</span></p>
+          <p><strong>Include</strong><span>Your workspace name, affected loan number, and a short description of the issue.</span></p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function FaqPage() {
+  return (
+    <section className="support-page">
+      <div className="panel support-panel">
+        <div className="panel-header">
+          <div>
+            <h2>FAQ</h2>
+            <p>Quick answers for common prototype questions</p>
+          </div>
+        </div>
+        <div className="support-copy">
+          <p><strong>Is this production ready?</strong><span>This is a working prototype. Authentication, database persistence, and workflow actions are active, but full compliance review is still a later step.</span></p>
+          <p><strong>Where do actions come from?</strong><span>Actions can be created manually, during intake, or generated from Admin templates.</span></p>
+          <p><strong>Can I edit records?</strong><span>Loan, customer, action, user, and template workflows have focused edit paths. Full delete/archive coverage is still expanding.</span></p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function MyAccountPage({
   currentUser,
   onLogOut,
@@ -3963,6 +4155,7 @@ function AdminTemplatesPage({
   onAddItem,
   onChangeUserStatus,
   onNewTemplate,
+  onResendInvitation,
   onRemoveItem,
   onSubmitUser,
   onSelectTemplate,
@@ -3984,6 +4177,7 @@ function AdminTemplatesPage({
   onAddItem: () => void
   onChangeUserStatus: (user: UserListItem, isActive: boolean) => void
   onNewTemplate: () => void
+  onResendInvitation: (user: UserListItem) => void
   onRemoveItem: (index: number) => void
   onSubmitUser: (event: FormEvent<HTMLFormElement>) => void
   onSelectTemplate: (id: string | null) => void
@@ -4162,14 +4356,26 @@ function AdminTemplatesPage({
                   <strong>{user.role}</strong>
                   <small>{user.emailConfirmed ? 'Email confirmed' : 'Invitation pending'}</small>
                 </span>
-                <button
-                  className={`secondary ${user.emailConfirmed ? 'danger' : ''}`}
-                  disabled={!canCreateUsers || currentUser?.id === user.id}
-                  type="button"
-                  onClick={() => onChangeUserStatus(user, false)}
-                >
-                  {user.emailConfirmed ? 'Remove' : 'Cancel'}
-                </button>
+                <div className="admin-user-actions">
+                  {!user.emailConfirmed && (
+                    <button
+                      className="secondary"
+                      disabled={!canCreateUsers}
+                      type="button"
+                      onClick={() => onResendInvitation(user)}
+                    >
+                      Resend link
+                    </button>
+                  )}
+                  <button
+                    className={`secondary ${user.emailConfirmed ? 'danger' : ''}`}
+                    disabled={!canCreateUsers || currentUser?.id === user.id}
+                    type="button"
+                    onClick={() => onChangeUserStatus(user, false)}
+                  >
+                    {user.emailConfirmed ? 'Remove' : 'Cancel'}
+                  </button>
+                </div>
               </article>
             ))}
             {activeUsers.length === 0 && <p className="state-message">No active users found.</p>}
@@ -4190,14 +4396,16 @@ function AdminTemplatesPage({
                       <strong>{user.role}</strong>
                       <small>{user.emailConfirmed ? 'Removed user' : 'Cancelled invitation'}</small>
                     </span>
-                    <button
-                      className="secondary"
-                      disabled={!canCreateUsers}
-                      type="button"
-                      onClick={() => onChangeUserStatus(user, true)}
-                    >
-                      Re-enable
-                    </button>
+                    <div className="admin-user-actions">
+                      <button
+                        className="secondary"
+                        disabled={!canCreateUsers}
+                        type="button"
+                        onClick={() => onChangeUserStatus(user, true)}
+                      >
+                        Re-enable
+                      </button>
+                    </div>
                   </article>
                 ))}
               </section>
@@ -4261,10 +4469,12 @@ function AdminTemplatesPage({
 }
 
 function ReportsPage({
+  onOpenActivity,
   onOpenAction,
   onOpenLoan,
   summary,
 }: {
+  onOpenActivity: (activity: ReportSummary['recentActivity'][number]) => void
   onOpenAction: (actionId: string) => void
   onOpenLoan: (loanNumber: string) => void
   summary: ReportSummary
@@ -4345,7 +4555,7 @@ function ReportsPage({
         </div>
         <div className="activity-list">
           {summary.recentActivity.map((activity) => (
-            <div className="activity-row" key={activity.id}>
+            <button className="activity-row" key={activity.id} type="button" onClick={() => onOpenActivity(activity)}>
               <span>
                 <strong>{activity.operation}</strong>
                 <small>{activity.entityType} {activity.entityId}</small>
@@ -4355,7 +4565,7 @@ function ReportsPage({
                 <small>{formatDateTime(activity.occurredAtUtc)}</small>
               </span>
               <p>{activity.changedFields}</p>
-            </div>
+            </button>
           ))}
           {summary.recentActivity.length === 0 && <p className="state-message">No audited activity yet.</p>}
         </div>
