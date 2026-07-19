@@ -66,7 +66,8 @@ Container settings:
 ```text
 Dockerfile: Dockerfile.api
 Port: Render-provided PORT, defaulting to 10000
-Health/API URL: https://api.lobilend.com/api/v1/auth/csrf
+Health check path: /healthz
+Manual API check: https://api.lobilend.com/api/v1/auth/csrf
 ```
 
 Backend environment variables:
@@ -146,11 +147,20 @@ variables.
 2. Deploy backend API with Neon, Mailgun, and OpenIddict certificate env vars.
 3. Add `api.lobilend.com` to the backend host and wait for TLS.
 4. Add the `api` DNS record in the active DNS provider.
-5. Confirm `https://api.lobilend.com/api/v1/auth/csrf` returns JSON.
-6. Deploy frontend with `VITE_API_BASE_URL=https://api.lobilend.com`.
-7. Confirm `https://lobilend.com` loads the SPA and can register/log in.
-8. Register a fresh account and confirm the Mailgun email arrives.
-9. Log in, load dashboard data, and create one test intake file.
+5. Confirm `https://api.lobilend.com/healthz` returns `{ "status": "ok" }`.
+6. Confirm `https://api.lobilend.com/api/v1/auth/csrf` returns JSON.
+7. Deploy frontend with `VITE_API_BASE_URL=https://api.lobilend.com`.
+8. Confirm `https://lobilend.com` loads the SPA and can register/log in.
+9. Register a fresh account and confirm the Mailgun email arrives.
+10. Log in, load dashboard data, and create one test intake file.
+
+## Render Health Check Note
+
+Do not use `/api/v1/auth/csrf` as Render's internal health check. That endpoint
+intentionally creates a secure antiforgery cookie. Render health checks hit the
+container over internal HTTP, which makes ASP.NET reject secure cookie creation.
+Use `/healthz` for health checks and reserve `/api/v1/auth/csrf` for external
+HTTPS browser/API validation.
 
 ## GoDaddy / DNS Checklist
 

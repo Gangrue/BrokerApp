@@ -6,7 +6,7 @@ services:
     region: virginia
     dockerfilePath: ./Dockerfile.api
     dockerContext: .
-    healthCheckPath: /api/v1/auth/csrf
+    healthCheckPath: /healthz
     domains:
       - api.lobilend.com
     envVars:

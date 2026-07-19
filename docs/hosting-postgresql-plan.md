@@ -113,6 +113,7 @@ The app now uses a Cookie BFF-style auth model:
 - Unsafe API calls must send the CSRF token from the readable `XSRF-TOKEN` cookie in the `X-XSRF-TOKEN` header.
 - Hosted frontend/API origins must be explicitly configured through CORS and must allow credentials.
 - Cross-origin hosted cookies require HTTPS and `SameSite=None`; local development uses relaxed cookie settings.
+- Hosted reverse proxies must forward `X-Forwarded-Proto`; the API enables forwarded headers so secure cookie generation sees external HTTPS correctly.
 
 OpenIddict is installed with EF Core stores and a seeded `broker-spa` public client for future Authorization Code + PKCE work. This first auth slice intentionally does not put access or refresh tokens in browser storage.
 
