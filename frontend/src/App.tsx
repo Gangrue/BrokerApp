@@ -53,7 +53,6 @@ import type {
   UserListItem,
 } from './api'
 import familyImage from './assets/FamilyImage.png'
-import lobilendLogo from './assets/lobilend-logo-white.png'
 import piggyImage from './assets/PiggyImage.webp'
 import './App.css'
 
@@ -71,6 +70,9 @@ const dashboardSpotlightTitles: Record<DashboardSpotlightFilter, string> = {
   upcoming: 'Upcoming loans',
 }
 type BorrowerMode = 'new' | 'existing'
+
+const brandLogoMark = '/LobiLendJustLogoTransparent.png'
+const brandLogoAndText = '/LobiLendLogoAndTextTransparent.png'
 
 type LoginFormState = {
   email: string
@@ -628,6 +630,7 @@ function App() {
   const [isCreatingUser, setIsCreatingUser] = useState(false)
   const [isSavingCustomer, setIsSavingCustomer] = useState(false)
   const [isSavingLoan, setIsSavingLoan] = useState(false)
+  const [busyMessage, setBusyMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
@@ -670,18 +673,21 @@ function App() {
     setUsers(userRows)
     setCurrentUser(activeUser)
 
-    const nextSelectedActionId = preferredActionId
-      && dashboardSummary.openActions.some((action) => action.id === preferredActionId)
-      ? preferredActionId
-      : dashboardSummary.openActions[0]?.id ?? null
+    const nextSelectedActionId = preferredActionId !== undefined
+      ? preferredActionId && dashboardSummary.openActions.some((action) => action.id === preferredActionId)
+        ? preferredActionId
+        : null
+      : selectedActionId && dashboardSummary.openActions.some((action) => action.id === selectedActionId)
+        ? selectedActionId
+        : null
 
     setSelectedActionId(nextSelectedActionId)
     setSelectedCustomerId((current) => current && customerRows.some((customer) => customer.id === current)
       ? current
-      : customerRows[0]?.id ?? null)
+      : null)
     setSelectedLoanNumber((current) => current && loanRows.some((loan) => loan.loanNumber === current)
       ? current
-      : loanRows[0]?.loanNumber ?? null)
+      : null)
     setSelectedTemplateId((current) => current && templateRows.some((template) => template.id === current)
       ? current
       : templateRows[0]?.id ?? null)
@@ -758,6 +764,7 @@ function App() {
   async function submitLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsAuthSubmitting(true)
+    setBusyMessage('Signing in...')
     setAuthError(null)
     setAuthMessage(null)
 
@@ -779,6 +786,7 @@ function App() {
     } catch (caughtError) {
       setAuthError(caughtError instanceof Error ? caughtError.message : 'Login failed')
     } finally {
+      setBusyMessage(null)
       setIsAuthSubmitting(false)
     }
   }
@@ -786,6 +794,7 @@ function App() {
   async function submitRegister(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsAuthSubmitting(true)
+    setBusyMessage('Creating account...')
     setAuthError(null)
     setAuthMessage(null)
 
@@ -806,6 +815,7 @@ function App() {
     } catch (caughtError) {
       setAuthError(caughtError instanceof Error ? caughtError.message : 'Registration failed')
     } finally {
+      setBusyMessage(null)
       setIsAuthSubmitting(false)
     }
   }
@@ -813,6 +823,7 @@ function App() {
   async function submitForgotPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsAuthSubmitting(true)
+    setBusyMessage('Sending reset email...')
     setAuthError(null)
     setAuthMessage(null)
 
@@ -834,6 +845,7 @@ function App() {
     } catch (caughtError) {
       setAuthError(caughtError instanceof Error ? caughtError.message : 'Password reset request failed')
     } finally {
+      setBusyMessage(null)
       setIsAuthSubmitting(false)
     }
   }
@@ -841,6 +853,7 @@ function App() {
   async function submitResetPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsAuthSubmitting(true)
+    setBusyMessage('Resetting password...')
     setAuthError(null)
     setAuthMessage(null)
 
@@ -852,6 +865,7 @@ function App() {
     } catch (caughtError) {
       setAuthError(caughtError instanceof Error ? caughtError.message : 'Password reset failed')
     } finally {
+      setBusyMessage(null)
       setIsAuthSubmitting(false)
     }
   }
@@ -867,6 +881,7 @@ function App() {
     }
 
     setIsAuthSubmitting(true)
+    setBusyMessage('Confirming email...')
     setAuthError(null)
     setAuthMessage(null)
 
@@ -879,6 +894,7 @@ function App() {
     } catch (caughtError) {
       setAuthError(caughtError instanceof Error ? caughtError.message : 'Email confirmation failed')
     } finally {
+      setBusyMessage(null)
       setIsAuthSubmitting(false)
     }
   }
@@ -1167,7 +1183,7 @@ function App() {
 
     setSelectedLoanNumber((current) => current && filteredLoans.some((loan) => loan.loanNumber === current)
       ? current
-      : filteredLoans[0]?.loanNumber ?? null)
+      : null)
   }, [filteredLoans, view])
 
   useEffect(() => {
@@ -1368,6 +1384,7 @@ function App() {
     preferredActionId: string | null | undefined = selectedAction?.id,
   ) {
     setIsMutating(true)
+    setBusyMessage('Updating workflow...')
     setWorkflowMessage(null)
     setError(null)
 
@@ -1386,6 +1403,7 @@ function App() {
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Workflow request failed')
     } finally {
+      setBusyMessage(null)
       setIsMutating(false)
     }
   }
@@ -1625,6 +1643,7 @@ function App() {
     }
 
     setIsMutating(true)
+    setBusyMessage('Deleting loan...')
     setWorkflowMessage(null)
     setError(null)
 
@@ -1642,6 +1661,7 @@ function App() {
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : 'Loan delete failed')
     } finally {
+      setBusyMessage(null)
       setIsMutating(false)
     }
   }
@@ -1965,6 +1985,7 @@ function App() {
 
   async function logOutSession() {
     setIsMutating(true)
+    setBusyMessage('Signing out...')
     setWorkflowMessage(null)
     setError(null)
 
@@ -1979,41 +2000,69 @@ function App() {
       setAuthView('login')
       replacePath('/login')
       setAuthMessage('Signed out.')
+      setBusyMessage(null)
       setIsMutating(false)
     }
   }
 
+  const derivedBusyMessage = isAuthSubmitting
+    ? 'Working securely...'
+    : isMutating
+      ? 'Saving changes...'
+      : isSubmittingIntake
+        ? 'Creating intake...'
+        : isSubmittingCustomerLoan
+          ? 'Adding loan...'
+          : isSavingTemplate
+            ? 'Saving template...'
+            : isCreatingUser
+              ? 'Sending invitation...'
+              : isSavingCustomer
+                ? 'Saving customer...'
+                : isSavingLoan
+                  ? 'Saving loan...'
+                  : null
+  const activeBusyMessage = busyMessage ?? derivedBusyMessage
+
+  if (isLoading) {
+    return <AuthLoadingScreen />
+  }
+
   if (!isLoading && !currentUser) {
     return (
-      <AuthShell
-        authError={authError}
-        authMessage={authMessage}
-        authView={authView}
-        forgotPasswordEmail={forgotPasswordEmail}
-        isSubmitting={isAuthSubmitting}
-        loginForm={loginForm}
-        registerForm={registerForm}
-        resetPasswordForm={resetPasswordForm}
-        onAuthViewChange={(nextView) => {
-          setAuthView(nextView)
-          replacePath(authPath(nextView))
-          setAuthError(null)
-          setAuthMessage(null)
-        }}
-        onConfirmEmail={submitConfirmEmail}
-        onForgotPasswordEmailChange={setForgotPasswordEmail}
-        onLoginChange={setLoginForm}
-        onRegisterChange={setRegisterForm}
-        onResetPasswordChange={setResetPasswordForm}
-        onSubmitForgotPassword={submitForgotPassword}
-        onSubmitLogin={submitLogin}
-        onSubmitRegister={submitRegister}
-        onSubmitResetPassword={submitResetPassword}
-      />
+      <>
+        <AuthShell
+          authError={authError}
+          authMessage={authMessage}
+          authView={authView}
+          forgotPasswordEmail={forgotPasswordEmail}
+          isSubmitting={isAuthSubmitting}
+          loginForm={loginForm}
+          registerForm={registerForm}
+          resetPasswordForm={resetPasswordForm}
+          onAuthViewChange={(nextView) => {
+            setAuthView(nextView)
+            replacePath(authPath(nextView))
+            setAuthError(null)
+            setAuthMessage(null)
+          }}
+          onConfirmEmail={submitConfirmEmail}
+          onForgotPasswordEmailChange={setForgotPasswordEmail}
+          onLoginChange={setLoginForm}
+          onRegisterChange={setRegisterForm}
+          onResetPasswordChange={setResetPasswordForm}
+          onSubmitForgotPassword={submitForgotPassword}
+          onSubmitLogin={submitLogin}
+          onSubmitRegister={submitRegister}
+          onSubmitResetPassword={submitResetPassword}
+        />
+        {activeBusyMessage && <GlobalBusyOverlay message={activeBusyMessage} />}
+      </>
     )
   }
 
   return (
+    <>
     <main className={`app-shell ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <aside className="sidebar" aria-label="Primary">
         <button
@@ -2026,9 +2075,11 @@ function App() {
           {isSidebarCollapsed ? '>' : '<'}
         </button>
         <button className="brand" type="button" onClick={() => openSidebarView('home')}>
-          <span className="brand-mark">LL</span>
+          <span className="brand-mark">
+            <img alt="" aria-hidden="true" src={brandLogoMark} />
+          </span>
           <span>
-            <strong>LobiLend</strong>
+            <img alt="LobiLend" className="brand-wordmark" src={brandLogoAndText} />
             <small>Loan workflow</small>
           </span>
         </button>
@@ -2075,7 +2126,7 @@ function App() {
 
       <section className="workspace" id="dashboard">
         <header className="topbar">
-          <div className="topbar-title">
+          <div className="topbar-title" key={view}>
             <p className="eyebrow">{view === 'intake' ? 'File intake' : view === 'home' ? 'Workspace home' : 'Daily workflow'}</p>
             <h1>
               {view === 'home' && 'Home'}
@@ -2110,7 +2161,7 @@ function App() {
           </div>
         </header>
 
-        {view !== 'home' && view !== 'intake' && view !== 'account' && view !== 'loanDetail' && view !== 'customerDetail' && view !== 'actionDetail' && (
+        {view !== 'home' && view !== 'intake' && view !== 'account' && view !== 'admin' && view !== 'loanDetail' && view !== 'customerDetail' && view !== 'actionDetail' && (
           <section className="metrics" aria-label="Action summary">
             <button className="metric-card metric-overdue" type="button" onClick={() => openDashboardSpotlight('overdue')}>
               <span>Overdue</span>
@@ -2209,7 +2260,7 @@ function App() {
             />
           </section>
 
-          <section className="content-grid">
+          <section className={`content-grid ${selectedAction ? '' : 'content-grid-full'}`}>
             <div className="panel action-panel">
               <div className="panel-header">
                 <div>
@@ -2273,13 +2324,15 @@ function App() {
               />
             </div>
 
-            <LoanContextPanel
-              action={selectedAction}
-              detail={loanDetail}
-              disabled={isMutating || isSavingLoan}
-              onComplete={completeSelectedAction}
-              onOpenDetail={openActionDetail}
-            />
+            {selectedAction && (
+              <LoanContextPanel
+                action={selectedAction}
+                detail={loanDetail}
+                disabled={isMutating || isSavingLoan}
+                onComplete={completeSelectedAction}
+                onOpenDetail={openActionDetail}
+              />
+            )}
           </section>
           </>
         ) : view === 'actionDetail' ? (
@@ -2338,7 +2391,7 @@ function App() {
             onRequestDelete={requestDeleteLoan}
           />
         ) : view === 'customers' ? (
-          <section className="content-grid">
+          <section className={`content-grid ${selectedCustomer ? '' : 'content-grid-full'}`}>
             <div className="panel customer-panel">
               <div className="panel-header">
                 <div>
@@ -2400,13 +2453,15 @@ function App() {
               />
             </div>
 
-            <CustomerContextPanel
-              detail={customerDetail}
-              onOpenAction={openDashboardAction}
-              onOpenLoan={openLoanPipeline}
-              onOpenDetails={openCustomerDetail}
-              selected={selectedCustomer}
-            />
+            {selectedCustomer && (
+              <CustomerContextPanel
+                detail={customerDetail}
+                onOpenAction={openDashboardAction}
+                onOpenLoan={openLoanPipeline}
+                onOpenDetails={openCustomerDetail}
+                selected={selectedCustomer}
+              />
+            )}
           </section>
         ) : view === 'customerDetail' ? (
           <CustomerDetailPage
@@ -2467,7 +2522,7 @@ function App() {
             onUpdateUserField={updateUserCreateField}
           />
         ) : (
-          <section className="content-grid">
+          <section className={`content-grid ${selectedLoan ? '' : 'content-grid-full'}`}>
             <div className="panel pipeline-panel">
               <div className="panel-header">
                 <div>
@@ -2523,13 +2578,15 @@ function App() {
               />
             </div>
 
-            <LoanPipelineDetailPanel
-              detail={loanDetail}
-              selected={selectedLoan}
-              onOpenAction={openDashboardAction}
-              onOpenDetails={openLoanDetail}
-              onRequestDelete={requestDeleteLoan}
-            />
+            {selectedLoan && (
+              <LoanPipelineDetailPanel
+                detail={loanDetail}
+                selected={selectedLoan}
+                onOpenAction={openDashboardAction}
+                onOpenDetails={openLoanDetail}
+                onRequestDelete={requestDeleteLoan}
+              />
+            )}
           </section>
         )}
       </section>
@@ -2562,6 +2619,8 @@ function App() {
         </div>
       )}
     </main>
+    {activeBusyMessage && <GlobalBusyOverlay message={activeBusyMessage} />}
+    </>
   )
 }
 
@@ -3308,6 +3367,30 @@ function LoanDetailPage({
   )
 }
 
+function AuthLoadingScreen() {
+  return (
+    <main className="auth-loading-screen" aria-busy="true" aria-live="polite">
+      <div className="auth-loading-card">
+        <img alt="LobiLend" src={brandLogoAndText} />
+        <span className="busy-spinner" aria-hidden="true" />
+        <p>Checking your session...</p>
+      </div>
+    </main>
+  )
+}
+
+function GlobalBusyOverlay({ message }: { message: string }) {
+  return (
+    <div className="busy-overlay" aria-live="assertive" aria-busy="true" role="status">
+      <div className="busy-overlay-card">
+        <span className="busy-spinner" aria-hidden="true" />
+        <strong>{message}</strong>
+        <small>Please wait while LobiLend finishes this request.</small>
+      </div>
+    </div>
+  )
+}
+
 function AuthShell({
   authError,
   authMessage,
@@ -3351,7 +3434,7 @@ function AuthShell({
     <main className="auth-shell">
       <section className="auth-hero">
         <button className="brand auth-brand" type="button" onClick={() => onAuthViewChange('login')}>
-          <img alt="LobiLend" src={lobilendLogo} />
+          <img alt="LobiLend" src={brandLogoAndText} />
         </button>
         <div>
           <p className="eyebrow">Secure workspace</p>

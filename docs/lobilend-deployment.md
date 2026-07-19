@@ -103,6 +103,10 @@ In the active DNS provider, add the CNAME record your backend host gives you for
 `api`. For Render this typically points `api` to the service's `*.onrender.com`
 hostname or to the exact DNS target Render displays.
 
+DNS record values must not include a protocol or path. Use
+`lobilend-api.onrender.com`, not `https://lobilend-api.onrender.com` and not
+`https://lobilend-api.onrender.com/healthz`.
+
 Leave `Auth__CookieDomain` unset unless a specific host requires it. The API can
 set a host-only session cookie for `api.lobilend.com`, and browser requests from
 `https://lobilend.com` will still send it to the API because the frontend client
@@ -175,7 +179,7 @@ GoDaddy DNS mode:
 Type   Name   Value
 A      @      75.2.60.5
 CNAME  www    unrivaled-eclair-d5927d.netlify.app
-CNAME  api    <backend host DNS target>
+CNAME  api    lobilend-api.onrender.com
 ```
 
 Netlify DNS mode:
@@ -183,7 +187,7 @@ Netlify DNS mode:
 ```text
 Type   Name   Value
 NETLIFY managed records for lobilend.com
-CNAME  api    <backend host DNS target>
+CNAME  api    lobilend-api.onrender.com
 ```
 
 Mailgun DNS records must also exist in the active DNS provider. Copy the exact
