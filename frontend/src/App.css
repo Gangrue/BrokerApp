@@ -1149,8 +1149,8 @@ select {
 }
 
 .content-grid-resizable {
-  grid-template-columns: minmax(360px, 1fr) 10px minmax(200px, min(var(--detail-panel-width, 360px), 80vw));
-  gap: 12px;
+  grid-template-columns: minmax(360px, 1fr) 18px minmax(200px, min(var(--detail-panel-width, 360px), 80vw));
+  gap: 8px;
 }
 
 .content-grid-full {
@@ -1162,33 +1162,45 @@ select {
   top: 18px;
   align-self: stretch;
   display: flex;
+  align-items: center;
   justify-content: center;
   min-height: min(680px, calc(100vh - 56px));
-  width: 10px;
+  width: 18px;
   padding: 0;
-  border: 0;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 24%, var(--color-border));
   border-radius: 999px;
-  background: transparent;
-  box-shadow: none;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-surface) 82%, transparent),
+      color-mix(in srgb, var(--color-surface-muted) 92%, transparent)
+    );
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.44);
   cursor: col-resize;
   opacity: 0.75;
   touch-action: none;
-  transition: opacity 140ms ease, background-color 140ms ease;
+  transition: opacity 140ms ease, background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 
 .detail-panel-resizer span {
   display: block;
-  width: 4px;
-  height: 100%;
-  border-radius: inherit;
-  background: color-mix(in srgb, var(--color-accent) 58%, var(--color-border));
+  width: 6px;
+  height: 72px;
+  border-radius: 999px;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-accent) 82%, var(--color-primary)) 0 4px,
+      transparent 4px 9px
+    );
 }
 
 .detail-panel-resizer:hover,
 .detail-panel-resizer:focus-visible,
 .is-detail-resizing .detail-panel-resizer {
-  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
-  box-shadow: none;
+  border-color: color-mix(in srgb, var(--color-accent) 54%, var(--color-primary));
+  background: color-mix(in srgb, var(--color-sidebar-active) 84%, var(--color-surface));
+  box-shadow: 0 8px 18px rgba(33, 44, 51, 0.08);
   opacity: 1;
   transform: none;
 }
@@ -1459,7 +1471,7 @@ select {
   animation: movingSuccessBorder 14s linear infinite;
 }
 
-.workflow-toast {
+.state-message.success.workflow-toast {
   position: fixed;
   top: 0;
   right: 0;
@@ -1475,18 +1487,18 @@ select {
   transition: opacity 2s ease, transform 2s ease;
 }
 
-.sidebar-collapsed .workflow-toast {
+.sidebar-collapsed .state-message.success.workflow-toast {
   left: 74px;
 }
 
-.workflow-toast:hover,
-.workflow-toast:active {
+.state-message.success.workflow-toast:hover,
+.state-message.success.workflow-toast:active {
   background: var(--color-success-bg);
   color: var(--color-success-text);
   box-shadow: none;
 }
 
-.workflow-toast.dismissing {
+.state-message.success.workflow-toast.dismissing {
   opacity: 0;
   transform: translateY(-6px);
 }
@@ -3364,8 +3376,8 @@ select {
     padding: 14px;
   }
 
-  .workflow-toast,
-  .sidebar-collapsed .workflow-toast {
+  .state-message.success.workflow-toast,
+  .sidebar-collapsed .state-message.success.workflow-toast {
     top: 0;
     right: 0;
     left: 0;

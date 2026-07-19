@@ -78,7 +78,7 @@ const dashboardSpotlightTitles: Record<DashboardSpotlightFilter, string> = {
 const detailPanelMinWidth = 200
 const detailPanelDefaultWidth = 360
 const detailPanelPrimaryMinWidth = 360
-const detailPanelResizeChromeWidth = 34
+const detailPanelResizeChromeWidth = 48
 
 type BorrowerMode = 'new' | 'existing'
 
