@@ -189,9 +189,39 @@
 }
 
 .auth-brand {
-  width: max-content;
-  max-width: min(1180px, 100%);
+  display: grid;
+  gap: 26px;
+  width: min(760px, 100%);
+  max-width: 100%;
+  margin-left: 25px;
+  padding: 24px;
+  border: 1px solid rgba(215, 208, 194, 0.32);
+  border-radius: 18px;
+  background: rgba(251, 248, 241, 0.06);
   color: var(--workspace-foreground);
+  animation: auth-brand-enter 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 18px 46px rgba(20, 25, 21, 0.18);
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.auth-brand:hover {
+  border-color: rgba(232, 217, 184, 0.56);
+  background: rgba(251, 248, 241, 0.1);
+  box-shadow: 0 22px 54px rgba(20, 25, 21, 0.22);
+  transform: translateY(-1px);
+}
+
+@keyframes auth-brand-enter {
+  from {
+    margin-left: 0;
+    opacity: 0.6;
+  }
+
+  to {
+    margin-left: 25px;
+    opacity: 1;
+  }
 }
 
 .auth-brand img {
@@ -204,19 +234,17 @@
   box-shadow: 0 24px 58px rgba(0, 0, 0, 0.2);
 }
 
-.auth-brand small {
-  color: color-mix(in srgb, var(--workspace-foreground) 72%, transparent);
-}
-
-.auth-hero h1 {
+.auth-brand h1 {
   max-width: 720px;
+  margin: 0;
   color: var(--workspace-foreground);
   font-size: 52px;
   line-height: 1.04;
 }
 
-.auth-hero p:last-child {
+.auth-brand p {
   max-width: 620px;
+  margin: 0;
   color: color-mix(in srgb, var(--workspace-foreground) 78%, transparent);
   font-size: 16px;
   line-height: 1.55;
@@ -371,7 +399,7 @@
 }
 
 .brand-mark {
-  display: grid;
+  display: none;
   place-items: center;
   width: 38px;
   height: 38px;
@@ -451,7 +479,7 @@ nav button:disabled:hover {
 
 .sidebar-summary {
   display: grid;
-  gap: 4px;
+  gap: 0;
   padding: 14px;
   border: 1px solid rgba(169, 130, 58, 0.28);
   border-radius: 8px;
@@ -484,6 +512,10 @@ nav button:disabled:hover {
 
 .sidebar-collapsed .brand {
   justify-content: center;
+}
+
+.sidebar-collapsed .brand-mark {
+  display: grid;
 }
 
 .sidebar-collapsed .brand span:last-child,
@@ -548,22 +580,35 @@ nav button:disabled:hover {
   position: relative;
   z-index: 0;
   min-width: min(560px, 100%);
-  margin-left: -28px;
+  margin-left: -36px;
+  opacity: 0.9;
   padding: 14px 58px 14px 28px;
   background: var(--color-success-bg);
   color: var(--color-text);
   box-shadow: 0 10px 22px rgba(31, 41, 45, 0.12);
   clip-path: polygon(0 0, calc(100% - 34px) 0, 100% 50%, calc(100% - 34px) 100%, 0 100%);
   animation: topbar-title-enter 500ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    margin-left 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.topbar-title:hover {
+  margin-left: -28px;
+  opacity: 1;
+  box-shadow: 0 12px 26px rgba(31, 41, 45, 0.15);
 }
 
 @keyframes topbar-title-enter {
   from {
     margin-left: -50px;
+    opacity: 0.72;
   }
 
   to {
-    margin-left: -28px;
+    margin-left: -36px;
+    opacity: 0.9;
   }
 }
 
@@ -625,6 +670,12 @@ nav button:disabled:hover {
   flex-direction: column;
   justify-content: space-between;
   min-width: 0;
+}
+
+.home-hero-wordmark {
+  width: min(260px, 68%);
+  height: auto;
+  object-fit: contain;
 }
 
 .home-hero h2 {
@@ -1404,6 +1455,18 @@ select {
   font-weight: 700;
 }
 
+.detail-field-action {
+  display: grid;
+  gap: 8px;
+  align-items: start;
+}
+
+.detail-field-action button {
+  width: fit-content;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
 .loan-detail-page {
   display: grid;
   gap: 16px;
@@ -1502,6 +1565,67 @@ select {
   grid-template-columns: 1fr;
   gap: 9px;
   margin-bottom: 16px;
+}
+
+.accordion-panel {
+  display: grid;
+  gap: 0;
+}
+
+.accordion-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.accordion-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.accordion-header p {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.accordion-toggle {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.accordion-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 180ms ease,
+    margin-top 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.accordion-panel.open .accordion-body {
+  grid-template-rows: 1fr;
+  margin-top: 12px;
+  opacity: 1;
+}
+
+.accordion-body-inner {
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  gap: 12px;
+}
+
+.accordion-body-inner > form {
+  display: grid;
+  gap: 12px;
 }
 
 .reschedule-box,
@@ -1685,10 +1809,21 @@ select {
 .reschedule-box label,
 .reassign-box label,
 .cancel-box label,
-.note-box label {
+.note-box label,
+.follow-up-box label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
   color: var(--color-text-muted);
   font-size: 13px;
   font-weight: 700;
+}
+
+.follow-up-box input,
+.follow-up-box select,
+.follow-up-box textarea {
+  width: 100%;
+  font-weight: 400;
 }
 
 .secondary.danger {
@@ -2127,9 +2262,66 @@ select {
 
 .breakdown-row i {
   display: block;
+  position: relative;
   height: 100%;
+  width: var(--bar-width, 0%);
+  overflow: hidden;
   border-radius: inherit;
   background: var(--contrast-teal);
+  transform-origin: left center;
+  animation: breakdownBarGrow 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.breakdown-row i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.28) 0,
+    rgba(255, 255, 255, 0.28) 7px,
+    transparent 7px,
+    transparent 14px
+  );
+  background-size: 28px 28px;
+  animation: breakdownStripeSlide 2s linear forwards;
+}
+
+.reports-page .breakdown-row div {
+  animation: breakdownTrackPulse 2s ease-out;
+}
+
+@keyframes breakdownBarGrow {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes breakdownStripeSlide {
+  from {
+    background-position: 0 0;
+    opacity: 0.9;
+  }
+
+  to {
+    background-position: 56px 0;
+    opacity: 0;
+  }
+}
+
+@keyframes breakdownTrackPulse {
+  0%,
+  82% {
+    height: 11px;
+  }
+
+  100% {
+    height: 8px;
+  }
 }
 
 .report-row {
@@ -2693,7 +2885,7 @@ select {
     overflow-x: hidden;
   }
 
-  .auth-hero h1 {
+  .auth-brand h1 {
     font-size: 34px;
   }
 
@@ -2713,6 +2905,21 @@ select {
 
   .auth-brand {
     width: 100%;
+    margin-left: 10px;
+    padding: 16px;
+    animation-name: auth-brand-enter-mobile;
+  }
+
+  @keyframes auth-brand-enter-mobile {
+    from {
+      margin-left: 0;
+      opacity: 0.6;
+    }
+
+    to {
+      margin-left: 10px;
+      opacity: 1;
+    }
   }
 
   .auth-loading-card img {
