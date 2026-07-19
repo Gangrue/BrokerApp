@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { CSSProperties, FormEvent, MouseEvent, ReactNode } from 'react'
+import type { CSSProperties, FormEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import {
   addActionComment,
   AuthRequiredError,
@@ -74,6 +74,12 @@ const dashboardSpotlightTitles: Record<DashboardSpotlightFilter, string> = {
   today: 'Due today',
   upcoming: 'Upcoming loans',
 }
+
+const detailPanelMinWidth = 200
+const detailPanelDefaultWidth = 360
+const detailPanelPrimaryMinWidth = 360
+const detailPanelResizeChromeWidth = 34
+
 type BorrowerMode = 'new' | 'existing'
 
 const brandLogoMark = '/LobiLendJustLogoTransparent.png'
@@ -601,6 +607,7 @@ function App() {
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null)
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
   const [selectedLoanNumber, setSelectedLoanNumber] = useState<string | null>(null)
+  const [detailPanelWidth, setDetailPanelWidth] = useState(detailPanelDefaultWidth)
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [view, setView] = useState<WorkspaceView>('home')
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('all')
@@ -1004,6 +1011,10 @@ function App() {
     ?? null
   ), [filteredLoans, selectedLoanNumber])
 
+  const adjustableDetailGridStyle = useMemo(() => ({
+    '--detail-panel-width': `${detailPanelWidth}px`,
+  }) as CSSProperties, [detailPanelWidth])
+
   const dashboardSpotlightItems = useMemo(() => {
     if (dashboardSpotlightFilter === 'closing') {
       return dashboard.closingWithin7Days
@@ -1184,6 +1195,44 @@ function App() {
     if (interactiveElement instanceof HTMLElement) {
       window.requestAnimationFrame(() => revealElementInHorizontalScroll(interactiveElement))
     }
+  }
+
+  function startDetailPanelResize(event: PointerEvent<HTMLButtonElement>) {
+    if (window.innerWidth <= 720) {
+      return
+    }
+
+    const grid = event.currentTarget.closest('.content-grid')
+
+    if (!(grid instanceof HTMLElement)) {
+      return
+    }
+
+    event.preventDefault()
+    const startX = event.clientX
+    const startWidth = detailPanelWidth
+    const gridWidth = grid.getBoundingClientRect().width
+    const maxByViewport = window.innerWidth * 0.8
+    const maxByGrid = gridWidth - detailPanelPrimaryMinWidth - detailPanelResizeChromeWidth
+    const maxWidth = Math.max(detailPanelMinWidth, Math.min(maxByViewport, maxByGrid))
+
+    document.documentElement.classList.add('is-detail-resizing')
+
+    function updateWidth(moveEvent: globalThis.PointerEvent) {
+      const nextWidth = startWidth - (moveEvent.clientX - startX)
+      setDetailPanelWidth(Math.round(Math.min(maxWidth, Math.max(detailPanelMinWidth, nextWidth))))
+    }
+
+    function stopResize() {
+      document.documentElement.classList.remove('is-detail-resizing')
+      window.removeEventListener('pointermove', updateWidth)
+      window.removeEventListener('pointerup', stopResize)
+      window.removeEventListener('pointercancel', stopResize)
+    }
+
+    window.addEventListener('pointermove', updateWidth)
+    window.addEventListener('pointerup', stopResize)
+    window.addEventListener('pointercancel', stopResize)
   }
 
   function openSidebarView(nextView: WorkspaceView) {
@@ -2541,7 +2590,7 @@ function App() {
             />
           </section>
 
-          <section className={`content-grid ${selectedAction ? '' : 'content-grid-full'}`}>
+          <section className={`content-grid ${selectedAction ? 'content-grid-resizable' : 'content-grid-full'}`} style={selectedAction ? adjustableDetailGridStyle : undefined}>
             <div className="panel action-panel">
               <div className="panel-header">
                 <div>
@@ -2606,15 +2655,18 @@ function App() {
             </div>
 
             {selectedAction && (
-            <LoanContextPanel
-              action={selectedAction}
-              detail={loanDetail}
-              disabled={isMutating || isSavingLoan}
-              onComplete={completeSelectedAction}
-              onClose={() => setSelectedActionId(null)}
-              onOpenDetail={openActionDetail}
-              onViewLoan={openLoanPipeline}
-            />
+              <>
+                <DetailPanelResizeHandle onPointerDown={startDetailPanelResize} />
+                <LoanContextPanel
+                  action={selectedAction}
+                  detail={loanDetail}
+                  disabled={isMutating || isSavingLoan}
+                  onComplete={completeSelectedAction}
+                  onClose={() => setSelectedActionId(null)}
+                  onOpenDetail={openActionDetail}
+                  onViewLoan={openLoanPipeline}
+                />
+              </>
             )}
           </section>
           </>
@@ -2674,7 +2726,7 @@ function App() {
             onRequestDelete={requestDeleteLoan}
           />
         ) : view === 'customers' ? (
-          <section className={`content-grid ${selectedCustomer ? '' : 'content-grid-full'}`}>
+          <section className={`content-grid ${selectedCustomer ? 'content-grid-resizable' : 'content-grid-full'}`} style={selectedCustomer ? adjustableDetailGridStyle : undefined}>
             <div className="panel customer-panel">
               <div className="panel-header">
                 <div>
@@ -2737,14 +2789,17 @@ function App() {
             </div>
 
             {selectedCustomer && (
-              <CustomerContextPanel
-                detail={customerDetail}
-                onClose={() => setSelectedCustomerId(null)}
-                onOpenAction={openDashboardAction}
-                onOpenLoan={openLoanPipeline}
-                onOpenDetails={openCustomerDetail}
-                selected={selectedCustomer}
-              />
+              <>
+                <DetailPanelResizeHandle onPointerDown={startDetailPanelResize} />
+                <CustomerContextPanel
+                  detail={customerDetail}
+                  onClose={() => setSelectedCustomerId(null)}
+                  onOpenAction={openDashboardAction}
+                  onOpenLoan={openLoanPipeline}
+                  onOpenDetails={openCustomerDetail}
+                  selected={selectedCustomer}
+                />
+              </>
             )}
           </section>
         ) : view === 'customerDetail' ? (
@@ -2804,7 +2859,7 @@ function App() {
             onUpdateUserField={updateUserCreateField}
           />
         ) : (
-          <section className={`content-grid ${selectedLoan ? '' : 'content-grid-full'}`}>
+          <section className={`content-grid ${selectedLoan ? 'content-grid-resizable' : 'content-grid-full'}`} style={selectedLoan ? adjustableDetailGridStyle : undefined}>
             <div className="panel pipeline-panel">
               <div className="panel-header">
                 <div>
@@ -2861,15 +2916,18 @@ function App() {
             </div>
 
             {selectedLoan && (
-            <LoanPipelineDetailPanel
-              detail={loanDetail}
-              selected={selectedLoan}
-              onClose={() => setSelectedLoanNumber(null)}
-              onOpenAction={openDashboardAction}
-              onOpenDetails={openLoanDetail}
-              onRequestDelete={requestDeleteLoan}
-              onViewAction={openDashboardAction}
-            />
+              <>
+                <DetailPanelResizeHandle onPointerDown={startDetailPanelResize} />
+                <LoanPipelineDetailPanel
+                  detail={loanDetail}
+                  selected={selectedLoan}
+                  onClose={() => setSelectedLoanNumber(null)}
+                  onOpenAction={openDashboardAction}
+                  onOpenDetails={openLoanDetail}
+                  onRequestDelete={requestDeleteLoan}
+                  onViewAction={openDashboardAction}
+                />
+              </>
             )}
           </section>
         )}
@@ -3021,6 +3079,23 @@ function ListPagination({
         Next
       </button>
     </div>
+  )
+}
+
+function DetailPanelResizeHandle({
+  onPointerDown,
+}: {
+  onPointerDown: (event: PointerEvent<HTMLButtonElement>) => void
+}) {
+  return (
+    <button
+      aria-label="Resize detail panel"
+      className="detail-panel-resizer"
+      type="button"
+      onPointerDown={onPointerDown}
+    >
+      <span aria-hidden="true" />
+    </button>
   )
 }
 
