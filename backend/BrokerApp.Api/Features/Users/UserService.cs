@@ -1,5 +1,6 @@
 using BrokerApp.Api.Data;
 using BrokerApp.Api.Domain;
+using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Auth;
 using BrokerApp.Api.Features.Dashboard;
 using Microsoft.AspNetCore.Identity;
@@ -13,6 +14,7 @@ public interface IUserService
     Task<IReadOnlyCollection<UserListItemDto>> GetUsersAsync(CancellationToken cancellationToken = default);
     Task<CurrentUserDto?> GetCurrentUserAsync(CancellationToken cancellationToken = default);
     Task<CreateUserResponseDto> CreateUserAsync(CreateUserRequest request, CancellationToken cancellationToken = default);
+    Task<UserListItemDto> SetUserActiveAsync(Guid userId, bool isActive, CancellationToken cancellationToken = default);
 }
 
 public sealed class UserService : IUserService
@@ -21,6 +23,7 @@ public sealed class UserService : IUserService
     private readonly UserManager<AppUser> _userManager;
     private readonly ICurrentUserContext _currentUser;
     private readonly IAuthEmailSender _emailSender;
+    private readonly IAuditWriter _auditWriter;
     private readonly ISystemClock _clock;
     private readonly IConfiguration _configuration;
     private readonly IWebHostEnvironment _environment;
@@ -30,6 +33,7 @@ public sealed class UserService : IUserService
         UserManager<AppUser> userManager,
         ICurrentUserContext currentUser,
         IAuthEmailSender emailSender,
+        IAuditWriter auditWriter,
         ISystemClock clock,
         IConfiguration configuration,
         IWebHostEnvironment environment)
@@ -38,6 +42,7 @@ public sealed class UserService : IUserService
         _userManager = userManager;
         _currentUser = currentUser;
         _emailSender = emailSender;
+        _auditWriter = auditWriter;
         _clock = clock;
         _configuration = configuration;
         _environment = environment;
@@ -131,6 +136,40 @@ public sealed class UserService : IUserService
             _environment.IsDevelopment() ? links.PasswordResetLink : null);
     }
 
+    public async Task<UserListItemDto> SetUserActiveAsync(Guid userId, bool isActive, CancellationToken cancellationToken = default)
+    {
+        if (_currentUser.Role != UserRoles.TeamLead)
+        {
+            throw new UnauthorizedAccessException("Only Team Leads can manage users.");
+        }
+
+        if (userId == _currentUser.UserId && !isActive)
+        {
+            throw new UserValidationException("You cannot remove your own active account.");
+        }
+
+        var user = await _dbContext.Users
+            .Where(item => item.OrganizationId == _currentUser.OrganizationId && item.Id == userId)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new UserValidationException("User was not found.");
+
+        if (user.IsActive == isActive)
+        {
+            return ToListItem(user);
+        }
+
+        user.IsActive = isActive;
+        _auditWriter.Record(
+            "User",
+            user.Id.ToString(),
+            AuditOperations.Updated,
+            isActive ? "User re-enabled." : user.EmailConfirmed ? "User removed." : "Invitation cancelled.");
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return ToListItem(user);
+    }
+
     private async Task<UserInvitationLinks> CreateInvitationLinksAsync(AppUser user)
     {
         var confirmationToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
@@ -171,6 +210,17 @@ public sealed class UserService : IUserService
         return string.IsNullOrWhiteSpace(trimmed)
             ? throw new UserValidationException($"{name} is required.")
             : trimmed;
+    }
+
+    private static UserListItemDto ToListItem(AppUser user)
+    {
+        return new UserListItemDto(
+            user.Id,
+            user.DisplayName,
+            user.Email ?? string.Empty,
+            user.Role,
+            user.IsActive,
+            user.EmailConfirmed);
     }
 }
 

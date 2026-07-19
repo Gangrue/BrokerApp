@@ -43,4 +43,18 @@ public sealed class UsersController : ControllerBase
             return BadRequest(new { message = exception.Message });
         }
     }
+
+    [Authorize(Roles = UserRoles.TeamLead)]
+    [HttpPut("{userId:guid}/status")]
+    public async Task<ActionResult<UserListItemDto>> UpdateStatus(Guid userId, UpdateUserStatusRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _userService.SetUserActiveAsync(userId, request.IsActive, cancellationToken));
+        }
+        catch (UserValidationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
 }

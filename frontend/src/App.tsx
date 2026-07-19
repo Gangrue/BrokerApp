@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { CSSProperties, FormEvent, ReactNode } from 'react'
+import type { CSSProperties, FormEvent, MouseEvent, ReactNode } from 'react'
 import {
   addActionComment,
   AuthRequiredError,
@@ -34,6 +34,7 @@ import {
   updateActionTemplate,
   updateCustomer,
   updateLoan,
+  updateUserStatus,
 } from './api'
 import type {
   ActionTemplateDetail,
@@ -61,6 +62,9 @@ type AuthView = 'login' | 'register' | 'forgotPassword' | 'resetPassword' | 'con
 type QueueFilter = 'all' | 'overdue' | 'today' | 'high'
 type DashboardSpotlightFilter = 'overdue' | 'today' | 'upcoming' | 'open' | 'closing'
 type DashboardPanelFlash = 'closing' | 'icd'
+type PendingNavigation = {
+  action: () => void
+}
 
 const dashboardSpotlightTitles: Record<DashboardSpotlightFilter, string> = {
   closing: 'Closing within 7 days',
@@ -619,10 +623,14 @@ function App() {
   const [userCreateForm, setUserCreateForm] = useState<UserCreateFormState>(() => emptyUserCreateForm())
   const [customerEditForm, setCustomerEditForm] = useState<CustomerEditForm>(() => emptyCustomerEditForm())
   const [loanEditForm, setLoanEditForm] = useState<LoanEditForm>(() => emptyLoanEditForm())
+  const [cleanActionDetailState, setCleanActionDetailState] = useState('')
+  const [cleanCustomerDetailState, setCleanCustomerDetailState] = useState('')
+  const [cleanLoanDetailState, setCleanLoanDetailState] = useState('')
   const [emailDraft, setEmailDraft] = useState<ActionEmailDraft | null>(null)
   const [userInvitationLinks, setUserInvitationLinks] = useState<{ confirmation: string | null, reset: string | null } | null>(null)
   const [isEmailSendConfirmOpen, setIsEmailSendConfirmOpen] = useState(false)
   const [pendingDeleteLoanNumber, setPendingDeleteLoanNumber] = useState<string | null>(null)
+  const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isMutating, setIsMutating] = useState(false)
   const [isGeneratingEmailDraft, setIsGeneratingEmailDraft] = useState(false)
@@ -1045,6 +1053,33 @@ function App() {
       : view === 'customers'
         ? 'Search Borrowers'
         : null
+  const currentLoanEditState = JSON.stringify(loanEditForm)
+  const currentActionDetailState = JSON.stringify({
+    cancelReason,
+    emailDraft,
+    followUpAction,
+    noteDraft,
+    reassignReason,
+    rescheduleDate,
+    rescheduleReason,
+  })
+  const currentCustomerDetailState = JSON.stringify({
+    customerEditForm,
+    customerLoanForm,
+  })
+  const hasUnsavedDetailChanges = (
+    view === 'loanDetail' && (
+      (cleanLoanDetailState !== '' && currentLoanEditState !== cleanLoanDetailState)
+      || JSON.stringify(followUpAction) !== JSON.stringify(emptyFollowUpAction())
+    )
+  ) || (
+    view === 'actionDetail' && (
+      (cleanActionDetailState !== '' && currentActionDetailState !== cleanActionDetailState)
+      || (cleanLoanDetailState !== '' && currentLoanEditState !== cleanLoanDetailState)
+    )
+  ) || (
+    view === 'customerDetail' && cleanCustomerDetailState !== '' && currentCustomerDetailState !== cleanCustomerDetailState
+  )
 
   useEffect(() => {
     setActionPage(0)
@@ -1078,23 +1113,82 @@ function App() {
     return index < 0 ? 0 : Math.floor(index / listPageSize)
   }
 
+  function navigateWithUnsavedGuard(action: () => void) {
+    if (hasUnsavedDetailChanges) {
+      setPendingNavigation({ action })
+      return
+    }
+
+    action()
+  }
+
+  function keepEditing() {
+    setPendingNavigation(null)
+  }
+
+  function discardChangesAndLeave() {
+    const action = pendingNavigation?.action
+    setPendingNavigation(null)
+    action?.()
+  }
+
+  function revealElementInHorizontalScroll(element: HTMLElement) {
+    let parent = element.parentElement
+
+    while (parent && parent !== document.body) {
+      if (parent.scrollWidth > parent.clientWidth + 1) {
+        const elementRect = element.getBoundingClientRect()
+        const parentRect = parent.getBoundingClientRect()
+
+        if (elementRect.right > parentRect.right) {
+          parent.scrollBy({ left: elementRect.right - parentRect.right + 16, behavior: 'smooth' })
+        } else if (elementRect.left < parentRect.left) {
+          parent.scrollBy({ left: elementRect.left - parentRect.left - 16, behavior: 'smooth' })
+        }
+
+        return
+      }
+
+      parent = parent.parentElement
+    }
+  }
+
+  function handleWorkspaceClickCapture(event: MouseEvent<HTMLElement>) {
+    if (!(event.target instanceof Element)) {
+      return
+    }
+
+    const interactiveElement = event.target.closest('a, button, input, select, textarea')
+
+    if (interactiveElement instanceof HTMLElement) {
+      window.requestAnimationFrame(() => revealElementInHorizontalScroll(interactiveElement))
+    }
+  }
+
   function openSidebarView(nextView: WorkspaceView) {
-    setSearchTerm('')
-    if (nextView === 'dashboard') {
-      setSelectedActionId(null)
-    }
-    if (nextView === 'loans') {
-      setSelectedLoanNumber(null)
-    }
-    if (nextView === 'customers') {
-      setSelectedCustomerId(null)
-    }
-    if (nextView === 'reports') {
-      setReportsAnimationKey((current) => current + 1)
-    }
-    setView(nextView)
-    window.requestAnimationFrame(() => {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+    navigateWithUnsavedGuard(() => {
+      setSearchTerm('')
+      if (nextView === 'dashboard') {
+        setSelectedActionId(null)
+      }
+      if (nextView === 'loans') {
+        setSelectedLoanNumber(null)
+      }
+      if (nextView === 'customers') {
+        setSelectedCustomerId(null)
+      }
+      if (nextView === 'reports') {
+        setReportsAnimationKey((current) => current + 1)
+      }
+      setView(nextView)
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        document.querySelector('.sidebar nav button.active')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+          inline: 'center',
+        })
+      })
     })
   }
 
@@ -1122,9 +1216,11 @@ function App() {
   }
 
   function backToDashboardAction() {
-    setActionPage(pageForIndex(filteredActions.findIndex((action) => action.id === selectedActionId)))
-    setView('dashboard')
-    scrollWorkspaceItemIntoView('action', selectedActionId)
+    navigateWithUnsavedGuard(() => {
+      setActionPage(pageForIndex(filteredActions.findIndex((action) => action.id === selectedActionId)))
+      setView('dashboard')
+      scrollWorkspaceItemIntoView('action', selectedActionId)
+    })
   }
 
   function openDashboardAction(actionId: string) {
@@ -1169,10 +1265,12 @@ function App() {
   }
 
   function backToLoanPipeline() {
-    const loanNumber = loanDetail?.loanNumber ?? selectedLoanNumber
-    setLoanPage(pageForIndex(filteredLoans.findIndex((loan) => loan.loanNumber === loanNumber)))
-    setView('loans')
-    scrollWorkspaceItemIntoView('loan', loanNumber)
+    navigateWithUnsavedGuard(() => {
+      const loanNumber = loanDetail?.loanNumber ?? selectedLoanNumber
+      setLoanPage(pageForIndex(filteredLoans.findIndex((loan) => loan.loanNumber === loanNumber)))
+      setView('loans')
+      scrollWorkspaceItemIntoView('loan', loanNumber)
+    })
   }
 
   function openCustomerDetail(customerId: string) {
@@ -1182,10 +1280,12 @@ function App() {
   }
 
   function backToCustomers() {
-    const customerId = customerDetail?.id ?? selectedCustomerId
-    setCustomerPage(pageForIndex(filteredCustomers.findIndex((customer) => customer.id === customerId)))
-    setView('customers')
-    scrollWorkspaceItemIntoView('customer', customerId)
+    navigateWithUnsavedGuard(() => {
+      const customerId = customerDetail?.id ?? selectedCustomerId
+      setCustomerPage(pageForIndex(filteredCustomers.findIndex((customer) => customer.id === customerId)))
+      setView('customers')
+      scrollWorkspaceItemIntoView('customer', customerId)
+    })
   }
 
   useEffect(() => {
@@ -1279,10 +1379,11 @@ function App() {
   useEffect(() => {
     if (!loanDetail) {
       setLoanEditForm(emptyLoanEditForm())
+      setCleanLoanDetailState('')
       return
     }
 
-    setLoanEditForm({
+    const form = {
       type: loanDetail.type,
       stage: loanDetail.stage,
       status: loanDetail.status,
@@ -1296,7 +1397,10 @@ function App() {
       icdSent: loanDetail.icdSent,
       icdSigned: loanDetail.icdSigned,
       lastContactDate: loanDetail.lastContactDate ?? '',
-    })
+    }
+
+    setLoanEditForm(form)
+    setCleanLoanDetailState(JSON.stringify(form))
   }, [loanDetail])
 
   useEffect(() => {
@@ -1331,16 +1435,25 @@ function App() {
   useEffect(() => {
     if (!customerDetail) {
       setCustomerEditForm(emptyCustomerEditForm())
+      setCleanCustomerDetailState('')
       return
     }
 
-    setCustomerEditForm({
+    const form = {
       firstName: customerDetail.firstName,
       lastName: customerDetail.lastName,
       email: customerDetail.email ?? '',
       phone: customerDetail.phone ?? '',
       status: customerDetail.status,
-    })
+    }
+    const addLoanForm = emptyIntakeForm()
+
+    setCustomerEditForm(form)
+    setCustomerLoanForm(addLoanForm)
+    setCleanCustomerDetailState(JSON.stringify({
+      customerEditForm: form,
+      customerLoanForm: addLoanForm,
+    }))
   }, [customerDetail])
 
   useEffect(() => {
@@ -1380,14 +1493,27 @@ function App() {
     if (!selectedAction) {
       setRescheduleDate('')
       setRescheduleReason('')
+      setCleanActionDetailState('')
       return
     }
 
-    setRescheduleDate(addDays(selectedAction.dueDate, 3))
+    const nextRescheduleDate = addDays(selectedAction.dueDate, 3)
+
+    setRescheduleDate(nextRescheduleDate)
     setRescheduleReason('')
     setCancelReason('')
     setReassignReason('')
     setFollowUpAction(emptyFollowUpAction())
+    setNoteDraft('')
+    setCleanActionDetailState(JSON.stringify({
+      cancelReason: '',
+      emailDraft: null,
+      followUpAction: emptyFollowUpAction(),
+      noteDraft: '',
+      reassignReason: '',
+      rescheduleDate: nextRescheduleDate,
+      rescheduleReason: '',
+    }))
   }, [selectedAction])
 
   useEffect(() => {
@@ -1528,6 +1654,7 @@ function App() {
     }
 
     setIsEmailSendConfirmOpen(false)
+    setEmailDraft(null)
     setWorkflowMessage(`Email sent to ${emailDraft.to || 'borrower'}.`)
   }
 
@@ -1862,6 +1989,30 @@ function App() {
     }
   }
 
+  async function changeUserActiveStatus(user: UserListItem, isActive: boolean) {
+    setIsMutating(true)
+    setBusyMessage(isActive ? 'Re-enabling user...' : user.emailConfirmed ? 'Removing user...' : 'Cancelling invitation...')
+    setWorkflowMessage(null)
+    setError(null)
+
+    try {
+      const updated = await updateUserStatus(user.id, { isActive })
+      setUsers(await getUsers())
+      setWorkflowMessage(
+        isActive
+          ? `${updated.displayName} re-enabled.`
+          : user.emailConfirmed
+            ? `${updated.displayName} removed.`
+            : `${updated.displayName} invitation cancelled.`,
+      )
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'User status update failed')
+    } finally {
+      setBusyMessage(null)
+      setIsMutating(false)
+    }
+  }
+
   function updateIntakeField(field: keyof Omit<IntakeFormState, 'actions'>, value: string | boolean) {
     setIntakeForm((current) => ({
       ...current,
@@ -2080,7 +2231,7 @@ function App() {
 
   return (
     <>
-    <main className={`app-shell ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <main className={`app-shell ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`} onClickCapture={handleWorkspaceClickCapture}>
       <aside className="sidebar" aria-label="Primary">
         <button
           aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -2096,7 +2247,7 @@ function App() {
             <img alt="" aria-hidden="true" src={brandLogoMark} />
           </span>
           <span>
-            <img alt="LobiLend" className="brand-wordmark" src={brandLogoMark} />
+            <img alt="LobiLend" className="brand-wordmark" src={brandLogoText} />
             <small>Loan workflow</small>
           </span>
         </button>
@@ -2539,6 +2690,7 @@ function App() {
             userInvitationLinks={userInvitationLinks}
             users={users}
             onAddItem={addTemplateItem}
+            onChangeUserStatus={changeUserActiveStatus}
             onNewTemplate={startNewTemplate}
             onRemoveItem={removeTemplateItem}
             onSubmitUser={submitUserCreate}
@@ -2618,6 +2770,20 @@ function App() {
           </section>
         )}
       </section>
+      {pendingNavigation && (
+        <div className="modal-backdrop" role="presentation">
+          <div aria-modal="true" className="confirmation-modal" role="dialog" aria-labelledby="unsavedChangesTitle">
+            <h2 id="unsavedChangesTitle">Unsaved changes</h2>
+            <p>You have unsaved changes. Are you sure?</p>
+            <div className="modal-actions">
+              <button className="secondary" type="button" onClick={keepEditing}>Keep editing</button>
+              <button className="secondary danger" type="button" onClick={discardChangesAndLeave}>
+                Discard changes and leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {isEmailSendConfirmOpen && (
         <div className="modal-backdrop" role="presentation">
           <div aria-modal="true" className="confirmation-modal" role="dialog" aria-labelledby="sendEmailTitle">
@@ -3034,6 +3200,37 @@ function AccordionPanel({
   )
 }
 
+function NextActionButton({
+  dueDate,
+  id,
+  loanNumber,
+  onOpenAction,
+  title,
+}: {
+  dueDate: string | null
+  id: string | null
+  loanNumber?: string
+  onOpenAction: (actionId: string) => void
+  title: string | null
+}) {
+  if (!id || !title) {
+    return <span className="next-action-empty">None</span>
+  }
+
+  return (
+    <button className="context-row next-action-row" type="button" onClick={() => onOpenAction(id)}>
+      <span>
+        <strong>{title}</strong>
+        <small>{loanNumber ? `Loan ${loanNumber}` : 'Open action'}</small>
+      </span>
+      <span>
+        <strong>{formatDueDate(dueDate)}</strong>
+        <small>View Action</small>
+      </span>
+    </button>
+  )
+}
+
 function LoanPipelineDetailPanel({
   detail,
   onOpenAction,
@@ -3082,13 +3279,13 @@ function LoanPipelineDetailPanel({
         </div>
         <div>
           <dt>Next action</dt>
-          <dd className="detail-field-action">
-            <span>{selected.nextActionTitle ?? nextOpenAction?.title ?? 'None'}</span>
-            {nextOpenAction && (
-              <button className="secondary" type="button" onClick={() => onViewAction(nextOpenAction.id)}>
-                View Action
-              </button>
-            )}
+          <dd>
+            <NextActionButton
+              dueDate={selected.nextActionDueDate ?? nextOpenAction?.dueDate ?? null}
+              id={nextOpenAction?.id ?? null}
+              onOpenAction={onViewAction}
+              title={selected.nextActionTitle ?? nextOpenAction?.title ?? null}
+            />
           </dd>
         </div>
         <div>
@@ -3764,6 +3961,7 @@ function AdminTemplatesPage({
   userInvitationLinks,
   users,
   onAddItem,
+  onChangeUserStatus,
   onNewTemplate,
   onRemoveItem,
   onSubmitUser,
@@ -3784,6 +3982,7 @@ function AdminTemplatesPage({
   userInvitationLinks: { confirmation: string | null, reset: string | null } | null
   users: UserListItem[]
   onAddItem: () => void
+  onChangeUserStatus: (user: UserListItem, isActive: boolean) => void
   onNewTemplate: () => void
   onRemoveItem: (index: number) => void
   onSubmitUser: (event: FormEvent<HTMLFormElement>) => void
@@ -3794,6 +3993,8 @@ function AdminTemplatesPage({
   onUpdateUserField: (field: keyof UserCreateFormState, value: string) => void
 }) {
   const canCreateUsers = currentUser?.role === 'Team Lead'
+  const activeUsers = users.filter((user) => user.isActive)
+  const inactiveUsers = users.filter((user) => !user.isActive)
 
   return (
     <section className="content-grid admin-grid">
@@ -3945,13 +4146,13 @@ function AdminTemplatesPage({
         <div className="panel-header">
           <div>
             <h2>User access</h2>
-            <p>{users.length} team member{users.length === 1 ? '' : 's'}</p>
+            <p>{activeUsers.length} active, {inactiveUsers.length} inactive</p>
           </div>
         </div>
 
         <div className="admin-users-grid">
           <div className="admin-user-list">
-            {users.map((user) => (
+            {activeUsers.map((user) => (
               <article className="admin-user-row" key={user.id}>
                 <span>
                   <strong>{user.displayName}</strong>
@@ -3961,9 +4162,46 @@ function AdminTemplatesPage({
                   <strong>{user.role}</strong>
                   <small>{user.emailConfirmed ? 'Email confirmed' : 'Invitation pending'}</small>
                 </span>
+                <button
+                  className={`secondary ${user.emailConfirmed ? 'danger' : ''}`}
+                  disabled={!canCreateUsers || currentUser?.id === user.id}
+                  type="button"
+                  onClick={() => onChangeUserStatus(user, false)}
+                >
+                  {user.emailConfirmed ? 'Remove' : 'Cancel'}
+                </button>
               </article>
             ))}
-            {users.length === 0 && <p className="state-message">No users found.</p>}
+            {activeUsers.length === 0 && <p className="state-message">No active users found.</p>}
+
+            {inactiveUsers.length > 0 && (
+              <section className="admin-disabled-users">
+                <div>
+                  <h3>Inactive users</h3>
+                  <p>Disabled users cannot access the workspace.</p>
+                </div>
+                {inactiveUsers.map((user) => (
+                  <article className="admin-user-row disabled" key={user.id}>
+                    <span>
+                      <strong>{user.displayName}</strong>
+                      <small>{user.email}</small>
+                    </span>
+                    <span>
+                      <strong>{user.role}</strong>
+                      <small>{user.emailConfirmed ? 'Removed user' : 'Cancelled invitation'}</small>
+                    </span>
+                    <button
+                      className="secondary"
+                      disabled={!canCreateUsers}
+                      type="button"
+                      onClick={() => onChangeUserStatus(user, true)}
+                    >
+                      Re-enable
+                    </button>
+                  </article>
+                ))}
+              </section>
+            )}
           </div>
 
           <form className="admin-user-form" onSubmit={onSubmitUser}>
@@ -4183,6 +4421,7 @@ function CustomerContextPanel({
 
   const loans = detail?.loans ?? []
   const openActions = detail?.openActions ?? []
+  const nextOpenAction = openActions[0] ?? null
 
   return (
     <aside className="panel detail-panel customer-detail-panel">
@@ -4207,11 +4446,15 @@ function CustomerContextPanel({
         </div>
         <div>
           <dt>Next action</dt>
-          <dd>{selected.nextActionTitle ?? 'None'}</dd>
-        </div>
-        <div>
-          <dt>Next due</dt>
-          <dd>{formatDueDate(selected.nextActionDueDate)}</dd>
+          <dd>
+            <NextActionButton
+              dueDate={selected.nextActionDueDate ?? nextOpenAction?.dueDate ?? null}
+              id={nextOpenAction?.id ?? null}
+              loanNumber={nextOpenAction?.loanNumber}
+              onOpenAction={onOpenAction}
+              title={selected.nextActionTitle ?? nextOpenAction?.title ?? null}
+            />
+          </dd>
         </div>
       </dl>
 
@@ -4307,7 +4550,8 @@ function CustomerDetailPage({
   const status = detail?.status ?? selected?.status ?? 'Loading'
   const loanCount = detail?.loans.length ?? selected?.loanCount ?? 0
   const openActionCount = detail?.openActions.length ?? selected?.openActionCount ?? 0
-  const nextActionTitle = selected?.nextActionTitle ?? detail?.openActions[0]?.title ?? 'None'
+  const nextOpenAction = detail?.openActions[0] ?? null
+  const nextActionTitle = selected?.nextActionTitle ?? nextOpenAction?.title ?? null
 
   return (
     <section className="customer-detail-page">
@@ -4332,7 +4576,15 @@ function CustomerDetailPage({
         </div>
         <div>
           <dt>Next action</dt>
-          <dd>{nextActionTitle}</dd>
+          <dd>
+            <NextActionButton
+              dueDate={selected?.nextActionDueDate ?? nextOpenAction?.dueDate ?? null}
+              id={nextOpenAction?.id ?? null}
+              loanNumber={nextOpenAction?.loanNumber}
+              onOpenAction={onOpenAction}
+              title={nextActionTitle}
+            />
+          </dd>
         </div>
       </dl>
       </div>

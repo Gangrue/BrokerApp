@@ -1,5 +1,6 @@
 using BrokerApp.Api.Domain;
 using BrokerApp.Api.Data;
+using BrokerApp.Api.Features.Audit;
 using BrokerApp.Api.Features.Dashboard;
 using BrokerApp.Api.Features.Users;
 using Microsoft.AspNetCore.Hosting;
@@ -94,6 +95,43 @@ public sealed class UserServiceTests
                 UserRoles.LoanOfficer)));
     }
 
+    [Fact]
+    public async Task SetUserActiveAsync_CancelsAndReEnablesInvitedUser()
+    {
+        var today = new DateOnly(2026, 7, 17);
+        await using var dbContext = CreateDbContext();
+        await DashboardTestData.SeedAsync(dbContext, today);
+        var service = CreateService(dbContext, TestCurrentUserContext.TeamLead, today: today);
+        var created = await service.CreateUserAsync(new CreateUserRequest(
+            "Pending Processor",
+            "pending.processor@example.test",
+            UserRoles.LoanOfficer));
+
+        var removed = await service.SetUserActiveAsync(created.User.Id, false);
+        var reEnabled = await service.SetUserActiveAsync(created.User.Id, true);
+
+        Assert.False(removed.IsActive);
+        Assert.True(reEnabled.IsActive);
+        Assert.Contains(dbContext.AuditEvents, audit => audit.EntityType == "User"
+            && audit.EntityId == created.User.Id.ToString()
+            && audit.ChangedFields == "Invitation cancelled.");
+        Assert.Contains(dbContext.AuditEvents, audit => audit.EntityType == "User"
+            && audit.EntityId == created.User.Id.ToString()
+            && audit.ChangedFields == "User re-enabled.");
+    }
+
+    [Fact]
+    public async Task SetUserActiveAsync_RejectsSelfRemoval()
+    {
+        var today = new DateOnly(2026, 7, 17);
+        await using var dbContext = CreateDbContext();
+        await DashboardTestData.SeedAsync(dbContext, today);
+        var service = CreateService(dbContext, TestCurrentUserContext.TeamLead, today: today);
+
+        await Assert.ThrowsAsync<UserValidationException>(() =>
+            service.SetUserActiveAsync(DevDataIds.TeamLeadId, false));
+    }
+
     private static BrokerAppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<BrokerAppDbContext>()
@@ -114,6 +152,7 @@ public sealed class UserServiceTests
             CreateUserManager(dbContext),
             currentUser,
             emailSender ?? new TestAuthEmailSender(),
+            new AuditWriter(dbContext, new FixedClock(today ?? new DateOnly(2026, 7, 17)), currentUser),
             new FixedClock(today ?? new DateOnly(2026, 7, 17)),
             new ConfigurationBuilder()
                 .AddInMemoryCollection(new Dictionary<string, string?>

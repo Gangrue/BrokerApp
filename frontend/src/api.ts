@@ -394,6 +394,10 @@ export type CreateUserResponse = {
   passwordResetDebugLink: string | null
 }
 
+export type UpdateUserStatusRequest = {
+  isActive: boolean
+}
+
 export type ActionTemplateDetail = {
   id: string
   name: string
@@ -646,6 +650,10 @@ export function getUsers() {
 
 export function createUser(request: CreateUserRequest) {
   return postJson<CreateUserResponse>('/api/v1/users', request)
+}
+
+export function updateUserStatus(id: string, request: UpdateUserStatusRequest) {
+  return putJson<UserListItem>(`/api/v1/users/${encodeURIComponent(id)}/status`, request)
 }
 
 export function getCurrentUser() {

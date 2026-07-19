@@ -3,6 +3,14 @@
   box-sizing: border-box;
 }
 
+.app-shell :where(img, svg, video, canvas) {
+  max-width: 100%;
+}
+
+.app-shell :where(button, input, select, textarea) {
+  min-width: 0;
+}
+
 :root {
   --color-app-bg: #34382F;
   --color-app-pattern: #4B5045;
@@ -2019,6 +2027,24 @@ select {
   background: var(--color-info-bg);
   color: var(--color-text-muted);
   text-align: left;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.context-row:hover {
+  border-left-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-info-bg) 78%, var(--color-surface));
+  color: var(--color-text);
+  box-shadow: 0 10px 22px rgba(31, 41, 45, 0.09);
+  transform: translateX(2px);
+}
+
+.context-row:active {
+  transform: translateX(1px) scale(0.995);
 }
 
 .context-row span {
@@ -2037,6 +2063,14 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.next-action-row {
+  margin-top: 4px;
+}
+
+.next-action-empty {
+  color: var(--color-text-muted);
 }
 
 .needs-groups {
@@ -2633,12 +2667,22 @@ select {
 
 .admin-user-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.45fr);
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.45fr) auto;
   gap: 14px;
+  align-items: center;
   padding: 12px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-surface-muted);
+}
+
+.admin-user-row.disabled {
+  opacity: 0.74;
+}
+
+.admin-user-row > button {
+  min-width: 92px;
+  padding: 8px 11px;
 }
 
 .admin-user-row span {
@@ -2657,6 +2701,24 @@ select {
 .admin-user-row small,
 .admin-user-form p {
   color: var(--color-text-muted);
+}
+
+.admin-disabled-users {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+}
+
+.admin-disabled-users h3,
+.admin-disabled-users p {
+  margin: 0;
+}
+
+.admin-disabled-users p {
+  color: var(--color-text-muted);
+  font-size: 13px;
 }
 
 .admin-user-form {
@@ -2882,6 +2944,14 @@ select {
 @media (max-width: 720px) {
   html,
   body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  #root {
+    width: 100%;
+    max-width: 100vw;
     overflow-x: hidden;
   }
 
@@ -2928,10 +2998,43 @@ select {
 
   .app-shell {
     min-height: 100dvh;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
   }
 
   .workspace {
+    width: 100%;
+    max-width: 100vw;
+    min-width: 0;
+    overflow-x: hidden;
     padding: 14px;
+  }
+
+  .sidebar,
+  .topbar,
+  .topbar-actions,
+  .metrics,
+  .dashboard-alert-grid,
+  .content-grid,
+  .home-page,
+  .home-hero,
+  .home-grid,
+  .home-summary-grid,
+  .loan-detail-page,
+  .customer-detail-page,
+  .action-detail-page,
+  .loan-detail-grid,
+  .report-grid,
+  .report-metrics,
+  .account-grid,
+  .admin-grid,
+  .admin-users-grid,
+  .panel,
+  .detail-panel {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .topbar,
@@ -2958,6 +3061,7 @@ select {
     padding: 12px;
     gap: 12px;
     max-height: none;
+    overflow-x: hidden;
   }
 
   .brand {
@@ -2980,11 +3084,16 @@ select {
   }
 
   nav {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     display: flex;
     gap: 6px;
     overflow-x: auto;
+    overscroll-behavior-x: contain;
     padding: 2px 0 6px;
     scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
   }
 
   nav button {
@@ -3031,7 +3140,10 @@ select {
   .topbar-title {
     width: 100%;
     min-width: 0;
+    max-width: 100%;
+    margin-left: 0;
     padding: 13px 16px;
+    clip-path: none;
   }
 
   .topbar h1 {
@@ -3045,6 +3157,9 @@ select {
   }
 
   .panel {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
     padding: 14px;
   }
 
@@ -3072,9 +3187,13 @@ select {
 
   .metrics {
     gap: 10px;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .metric-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     min-height: 104px;
   }
 
@@ -3110,6 +3229,7 @@ select {
   .context-row,
   .dashboard-alert-row,
   .need-row {
+    max-width: 100%;
     width: 100%;
     min-width: 0;
   }
@@ -3188,8 +3308,11 @@ select {
   .dashboard-alert-row strong,
   .dashboard-alert-row small,
   .need-row strong,
-  .need-row small {
+  .need-row small,
+  .action-main strong,
+  .action-main small {
     white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .report-row span:last-child,
@@ -3200,7 +3323,11 @@ select {
 
   .workflow-actions,
   .reschedule-controls,
-  .follow-up-grid {
+  .follow-up-grid,
+  .form-grid,
+  .two-column,
+  .three-column,
+  .action-grid {
     grid-template-columns: 1fr;
   }
 
