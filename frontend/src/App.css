@@ -1473,9 +1473,9 @@ select {
 
 .state-message.success.workflow-toast {
   position: fixed;
-  top: 0;
-  right: 0;
-  left: 260px;
+  top: 16px;
+  right: 16px;
+  left: 276px;
   z-index: 5000;
   display: block;
   width: auto;
@@ -1488,7 +1488,7 @@ select {
 }
 
 .sidebar-collapsed .state-message.success.workflow-toast {
-  left: 74px;
+  left: 90px;
 }
 
 .state-message.success.workflow-toast:hover,
@@ -3378,9 +3378,9 @@ select {
 
   .state-message.success.workflow-toast,
   .sidebar-collapsed .state-message.success.workflow-toast {
-    top: 0;
-    right: 0;
-    left: 0;
+    top: 16px;
+    right: 16px;
+    left: 16px;
   }
 
   .sidebar,
