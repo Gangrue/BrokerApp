@@ -1,0 +1,31 @@
+FEATURES TO ADD...
+
+
+TODO:
+1. Text/Email Customization for borrowers. Allow Loan Officers to modify what messages will be sent/when they will be sent and what content the borrower sees in message.
+2. Add Jira-like board view for Dashboard actions? Allow for easy movement between needs/done/etc.
+3. Document Submission? This requires better security.
+4. Push for document to be signed.
+5. Previous clients page, to allow for "reaching out" or such.
+6. Spreadsheet Migration button "Import" on all pages. Allow Upload XLSX, XLSM, or CSV. Automatically suggest field mappings. Updates duplicate rows.
+7. Generous free tier.
+8. After certain amount of loans, customers, users, data, etc, bump to paid version.
+9. App store with Users able to write up custom apps.
+10. "Demo" view to allow users to see what the work flow is like.
+11. Borrower view, that allows signed up customers to view where their current documents/loan is in the process.
+12. Request documents. Nudges on documents.
+13. Upcoming schedule on home page.
+14. Hero image as report overview?
+15. "Import" button next to Create New.
+16. Processor Morning Triage. Automated guide of highest priority items with turbo tax single-action items.
+17. Team desk messages
+18. Team Calendar view
+19. Team desk "Commitment" items (Rows managed by team, that show what each team member promised they would complete)
+20. Customizable Header tabs by Admin (Reduce clutter).
+21. Light weight LOS Synchronization.
+22.
+
+COMPLETED ITEMS:
+1.
+2.
+3.

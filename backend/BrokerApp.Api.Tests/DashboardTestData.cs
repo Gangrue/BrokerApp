@@ -26,6 +26,15 @@ internal static class DashboardTestData
             Role = UserRoles.LoanOfficer,
             CreatedAtUtc = now
         };
+        var teamLead = new AppUser
+        {
+            Id = DevDataIds.TeamLeadId,
+            OrganizationId = organization.Id,
+            DisplayName = "Test Team Lead",
+            Email = "teamlead@example.test",
+            Role = UserRoles.TeamLead,
+            CreatedAtUtc = now
+        };
 
         var customer = new Customer
         {
@@ -64,6 +73,7 @@ internal static class DashboardTestData
 
         dbContext.Add(organization);
         dbContext.Add(loanOfficer);
+        dbContext.Add(teamLead);
         dbContext.Add(customer);
         dbContext.Add(loan);
         dbContext.AddRange(

@@ -1,0 +1,571 @@
+# LobiLend Competitor Research
+
+Research date: July 20, 2026
+Scope: Closest mortgage workflow tools first, adjacent mortgage CRM/POS platforms second.
+
+This document uses public product pages, help documentation, and public pricing/positioning pages. Product details, pricing, and positioning can change. Treat this as a strategic snapshot, not a legal or procurement review.
+
+
+## 1. Executive Summary
+
+LobiLend should be positioned as a lightweight active-loan workflow cockpit for loan officers, processors, and small mortgage broker teams that still rely on spreadsheets, email, and memory to move loan files forward.
+
+The clearest wedge is not "another mortgage CRM" and not "another borrower portal." The strongest position is:
+
+LobiLend is the simplest operational layer between a spreadsheet tracker and a heavyweight CRM/POS/LOS platform.
+
+The closest competitors solve pieces of this workflow:
+
+- BorrowerDocs focuses on borrower document requests, upload status, Q&A, reminders, and export.
+- WaveDesk focuses on trailing conditions, borrower portal, condition templates, and funded-loan pricing.
+- PipelineSteady goes broader as a full independent brokerage operating system with portal, pipeline, conditions, websites, marketing, retention, and document vaulting.
+- Floify and Maxwell are stronger borrower/POS task platforms with automated document needs and borrower-facing workflow.
+- BNTouch, LoanOfficer.ai, Total Expert, and Jungo are adjacent CRM/customer engagement tools that shape market expectations but are not direct active-file workflow replacements.
+
+Market opening:
+
+Most platforms over-index on borrower document collection, CRM/marketing automation, or full-stack operating systems. LobiLend can win by focusing on internal file execution: overdue work, due-today work, closing soon, ICD attention, borrower needs, title needs, realtor needs, notes, template-backed actions, and simple team accountability.
+
+Strategic recommendation:
+
+Build LobiLend as the "processor-first active file command center" for small teams. Add borrower/title/realtor communication and spreadsheet import next, but avoid trying to replace the LOS or become an enterprise CRM too early.
+
+
+## 2. LobiLend Use Case
+
+### Target user
+
+- Independent loan officers.
+- Small mortgage broker teams.
+- Loan processors or loan officer assistants.
+- Team leads who need visibility into who owns which file and what is blocking closing.
+
+### Job to be done
+
+When a loan is active, the team needs to know exactly what must happen next, who needs it, when it is due, and which files are at risk of delay.
+
+LobiLend replaces spreadsheet-based processing trackers with:
+
+- Dashboard queues for overdue, due today, upcoming, open queue, closing soon, and ICD attention.
+- Loan pipeline views with borrower, loan officer, close timing, ICD status, and open condition counts.
+- Customer records with multiple loans.
+- Borrower, title, and realtor needs grouped by section.
+- Notes, history, and audit events.
+- Template-backed action generation for standard purchase/refinance workflows.
+- Intake that creates borrowers, loans, initial actions, and notes.
+
+### Current pain
+
+Small mortgage teams often run active files through a mix of:
+
+- A spreadsheet tracker.
+- Email inboxes.
+- Personal reminders.
+- Borrower document portals.
+- LOS milestone screens.
+- Manual updates to title, realtor, borrower, and internal processors.
+
+The pain is not just missing documents. It is knowing the daily operational truth:
+
+- What is late?
+- What is due today?
+- Which files are closing soon?
+- Which loans have ICD issues?
+- Which party is blocking progress: borrower, title, realtor, or internal team?
+- Which files have been touched recently?
+- Which loan officer or processor owns the next step?
+
+### Product promise
+
+LobiLend should promise:
+
+"Know what needs attention today across every active file, without managing the loan pipeline from a spreadsheet."
+
+### Similar-model criteria
+
+Competitors are similar when they support one or more of:
+
+- Active loan file tracking.
+- Needs, conditions, tasks, or borrower document requests.
+- Borrower/title/realtor follow-up.
+- Template-backed task/checklist creation.
+- Queue visibility by due date, status, or urgency.
+- Small-team broker usability.
+- Operating above or beside the LOS rather than replacing it.
+
+
+## 3. Competitor Matrix
+
+| Product | Category | Target user | Operating model | Pricing visibility | Strengths | Weakness vs LobiLend opportunity | Threat |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| BorrowerDocs | Direct/near-direct | Independent brokers and small teams | Branded borrower portal, document checklists, per-document Q&A, reminders, export ZIP | Public: free, $19/mo, $49/mo tiers shown publicly | Very simple, low-cost, borrower-friendly, no borrower account required, document Q&A | Focused on borrower document collection, not full internal borrower/title/realtor processing cockpit | Medium |
+| WaveDesk | Direct/near-direct | Mortgage originators needing condition tracking | Condition management, borrower portal, loan templates, secure document storage | Public: $100 per funded loan shown publicly | Strong condition workflow positioning, borrower portal, loan templates, pay-on-funded model | Appears condition/document centered; LobiLend can own daily internal queue, ICD/closing urgency, and small-team command center | Medium-High |
+| PipelineSteady | Direct/near-direct but broader | Independent mortgage brokerages | Brokerage operating system: website, application, documents, pipeline, conditions, closing, referrals, retention | Public: $599/mo Originator, $1,499/mo Team, $3,499/mo Concierge shown publicly | Broad one-login platform, borrower/realtor portal story, document vault, automation, retention, compliance positioning | Higher price and broader scope; LobiLend can be simpler, cheaper, faster to adopt, and spreadsheet-replacement first | High |
+| Floify | Adjacent/direct for document workflow | LOs and teams using borrower POS/document collection | Borrower portal, loan flow, document templates, quick packs, milestones, notifications, auto doc request rules | Not evaluated here; public docs focus on capabilities | Mature borrower document/POS automation, customizable notifications, milestone and quick-pack depth | More borrower/POS oriented than internal processor command center; likely heavier setup | Medium |
+| Maxwell Borrower Tasks | Adjacent/direct for borrower tasks | Lenders using Maxwell borrower hub/POS | Borrower tasks, SmartTasks, manual follow-up tasks, due dates, email reminders | Not evaluated here; help docs focus on capabilities | Strong rule-triggered borrower task logic and borrower-facing task UX | Borrower-facing POS workflow, not necessarily small broker internal spreadsheet replacement | Medium |
+| BNTouch | Adjacent CRM benchmark | LOs, brokers, lenders | Mortgage CRM, marketing automation, POS, LOS sync, AI assistant, campaigns | Public: $165/mo individual, team from $95/user/mo plus activation per public page | Mortgage-specific CRM depth, LOS integrations, campaigns, AI, credit pull/refi alerts | Broad CRM and marketing focus; LobiLend can be simpler for active processing and operational task execution | Medium |
+| LoanOfficer.ai | Adjacent AI CRM benchmark | Solo LOs, teams, top producers | AI CRM, lead response, contact database, property/rate intelligence, campaigns, LOS connectivity | Pricing not captured in this research pass | Strong AI and opportunity detection story, property/rate intelligence, marketing automation | Sales/growth/CRM-led rather than active file processing-led | Medium |
+| Total Expert | Adjacent enterprise benchmark | Banks, lenders, credit unions, enterprise mortgage teams | Customer engagement platform, marketing automation, sales productivity, compliance, AI sales assistant | Contact/demo sales | Enterprise credibility, customer intelligence, compliance workflows, AI assistant | Too broad and enterprise for spreadsheet replacement; LobiLend can win on speed, simplicity, and small-team usability | Low-Medium |
+| Jungo | Adjacent CRM benchmark | Larger teams using Salesforce or needing enterprise CRM | Mortgage CRM on Salesforce, LOS sync, lead management, marketing, automation, SMS, referral programs | Often demo/contact; public pages emphasize Salesforce platform | Enterprise reliability, Salesforce ecosystem, LOS sync, automation | Salesforce complexity and overhead; LobiLend can be easier and more operationally focused | Medium |
+
+
+## 4. Competitor Deep Dives
+
+### BorrowerDocs
+
+Source: https://borrowerdocs.com/
+
+How it operates:
+
+BorrowerDocs is a lightweight borrower document portal for mortgage brokers. It gives the broker a branded portal, document checklists, per-document Q&A, borrower upload status, reminders, and export. Its public page emphasizes getting started quickly and serving independent mortgage brokers and small teams.
+
+What it does better than LobiLend today:
+
+- Borrower-facing portal is central and already positioned.
+- Document upload/review/export is a clear workflow.
+- Very transparent low-cost pricing.
+- Strong simple value proposition: stop chasing borrowers for documents.
+
+What LobiLend can do better:
+
+- Broaden beyond borrower documents into complete active-file task execution.
+- Include borrower, title, realtor, and internal needs in one command center.
+- Make closing urgency, ICD attention, and daily work queues the primary workflow.
+- Add spreadsheet import to capture teams that already have a processing tracker.
+
+Likely buyer fit:
+
+Solo broker or small team that mainly needs borrower document collection and does not need broader internal pipeline controls.
+
+Strategic threat rating:
+
+Medium. BorrowerDocs is a strong wedge for document collection, but LobiLend can differentiate as the internal processor dashboard rather than just the borrower upload portal.
+
+
+### WaveDesk
+
+Source: https://www.wavedesk.ai/
+
+How it operates:
+
+WaveDesk positions around trailing condition tracking. Its public page emphasizes automated condition management, borrower portal, loan templates, secure document storage, and flat per-funded-loan pricing.
+
+What it does better than LobiLend today:
+
+- Clear condition-management positioning.
+- Borrower portal and secure document storage are central.
+- Loan templates map closely to required conditions.
+- Funded-loan pricing may appeal to brokers who dislike fixed SaaS cost.
+
+What LobiLend can do better:
+
+- Focus on processor daily execution across all action types, not just trailing conditions.
+- Provide stronger internal visibility into borrower/title/realtor ownership.
+- Build a spreadsheet-to-workflow migration wedge.
+- Offer lower-friction setup for teams not ready for portal/document storage replacement.
+
+Likely buyer fit:
+
+Mortgage originators who want condition automation and borrower portal functionality with cost tied to funded loans.
+
+Strategic threat rating:
+
+Medium-High. WaveDesk is close to the condition-management portion of LobiLend's direction. LobiLend should differentiate on internal operational command, not compete feature-for-feature on document portal first.
+
+
+### PipelineSteady
+
+Source: https://pipelinesteady.com/
+
+How it operates:
+
+PipelineSteady positions as a mortgage brokerage operating system for independent brokers. It covers lead, application, documents, pipeline, conditions, closing, referrals, borrower portal, realtor hub, document vault, marketing, retention, and websites. Public pricing is materially higher than lightweight tools and starts at hundreds of dollars per month.
+
+What it does better than LobiLend today:
+
+- Much broader platform narrative.
+- Borrower and realtor experiences are part of the system.
+- Strong "one login replaces many tools" positioning.
+- Public pricing and packaging are mature.
+- Compliance and document-vault positioning are well developed.
+
+What LobiLend can do better:
+
+- Be substantially simpler and less expensive.
+- Avoid replacing the whole brokerage stack in the first sale.
+- Win teams that want to keep their LOS/POS but fix their active file tracker.
+- Launch with fast onboarding and spreadsheet import instead of concierge setup.
+
+Likely buyer fit:
+
+Independent mortgage brokerages willing to adopt a broad operating system and pay for a managed platform.
+
+Strategic threat rating:
+
+High. PipelineSteady is strategically close because it also attacks spreadsheet fragmentation. LobiLend should avoid direct "whole brokerage OS" positioning and instead own the narrower processing command-center wedge.
+
+
+### Floify
+
+Sources:
+- https://floify.com/blog/automate-mortgage-document-needs
+- https://floify.com/blog/the-floify-customization-checklist
+- https://floify.com/blog/managing-floify-notifications
+
+How it operates:
+
+Floify is a mature mortgage automation/POS platform focused heavily on borrower application and document workflows. Public materials describe auto document request rules, template documents, document categories, quick packs, customizable notifications, milestone templates, and borrower-facing communications.
+
+What it does better than LobiLend today:
+
+- Mature borrower document workflow.
+- Automated needs-list generation from borrower/application data.
+- Customizable notifications and milestone emails.
+- Strong borrower portal/POS orientation.
+
+What LobiLend can do better:
+
+- Stay processor-first and daily-queue-first.
+- Avoid becoming a heavy borrower portal configuration project.
+- Make title/realtor/internal follow-up as important as borrower document collection.
+- Provide a cleaner, narrower replacement for spreadsheet trackers.
+
+Likely buyer fit:
+
+Loan officers or lenders who prioritize borrower application, document collection, and borrower portal automation.
+
+Strategic threat rating:
+
+Medium. Floify is strong and mature but not exactly the same wedge. It is more POS/document-workflow than internal active-file cockpit.
+
+
+### Maxwell Borrower Tasks
+
+Sources:
+- https://docs.himaxwell.com/platform-overview/borrower-hub/borrower-tasks
+- https://knowledge.himaxwell.com/175328-for-lenders/smarttasks
+
+How it operates:
+
+Maxwell Borrower Tasks are borrower-facing tasks inside the Borrower Hub. Tasks can include document gathering, verification, and e-sign items. SmartTasks can be generated from application/product logic, while manual follow-up tasks can also be created. Public docs describe due dates, borrower notifications, urgency tags, and completion status.
+
+What it does better than LobiLend today:
+
+- Strong borrower-facing task execution model.
+- Conditional task generation from loan/application data.
+- Borrower notifications and due-date status are mature concepts.
+- Integrated into a borrower hub/POS experience.
+
+What LobiLend can do better:
+
+- Serve teams that do not want a full POS workflow change.
+- Focus on the internal staff cockpit across borrower, title, realtor, and processor tasks.
+- Build around the reality of spreadsheet-style processing trackers.
+- Add practical import/export paths for small teams.
+
+Likely buyer fit:
+
+Lenders using Maxwell or teams prioritizing borrower hub task completion over internal queue replacement.
+
+Strategic threat rating:
+
+Medium. Maxwell validates the task-based workflow model, but LobiLend can differentiate as a lightweight internal command center.
+
+
+### BNTouch
+
+Source: https://bntouch.com/mortgage-crm/
+
+How it operates:
+
+BNTouch is a mortgage CRM and growth platform for loan officers, brokers, and lenders. Public materials emphasize LOS integrations, mortgage-specific drip campaigns, AI assistant, lead scoring, credit pull alerts, post-close follow-up, digital applications, SMS, and marketing automation. Public pricing on the reviewed page lists an individual plan at $165/month and team pricing from $95/user/month plus activation fees.
+
+What it does better than LobiLend today:
+
+- Mature mortgage CRM and marketing automation.
+- LOS integration story.
+- Large campaign/template library.
+- AI assistant and lead/opportunity features.
+- Strong past-client retention and credit pull alert positioning.
+
+What LobiLend can do better:
+
+- Avoid CRM breadth and focus on active in-process loan execution.
+- Provide a cleaner processor queue and tracker replacement.
+- Be simpler for small teams that do not need marketing automation.
+
+Likely buyer fit:
+
+Loan officers who need lead nurture, post-close marketing, past-client recapture, and mortgage CRM automation.
+
+Strategic threat rating:
+
+Medium. BNTouch is important because buyers may compare any mortgage workflow app to CRM suites, but it is not primarily a processing tracker replacement.
+
+
+### LoanOfficer.ai
+
+Source: https://loanofficer.ai/crm
+
+How it operates:
+
+LoanOfficer.ai positions as a mortgage-first AI CRM with contact management, lead response, activity-driven intelligence, property/rate insights, opportunity detection, campaign automation, and LOS connectivity. Its differentiation is AI-driven growth and borrower intelligence.
+
+What it does better than LobiLend today:
+
+- Strong AI growth positioning.
+- Property intelligence and refinance/PMI/equity opportunity detection.
+- Lead response and campaign automation.
+- Broad CRM contact model.
+
+What LobiLend can do better:
+
+- Stay closer to active processing work rather than top-of-funnel or retention intelligence.
+- Build a concrete daily-work execution model before adding AI.
+- Use AI later for summaries, next-action suggestions, and email drafting inside active files.
+
+Likely buyer fit:
+
+Loan officers who want AI to manage leads, follow-up, campaigns, and opportunity detection.
+
+Strategic threat rating:
+
+Medium. Strong market narrative, but adjacent to LobiLend's processor-first wedge.
+
+
+### Total Expert
+
+Source: https://www.totalexpert.com/
+
+How it operates:
+
+Total Expert is an enterprise customer engagement platform for financial institutions. It combines customer intelligence, marketing automation, sales productivity, compliance, AI sales assistance, and services for banks, lenders, credit unions, and insurers.
+
+What it does better than LobiLend today:
+
+- Enterprise credibility.
+- Broad financial institution platform.
+- Compliance and marketing workflows.
+- Customer intelligence and customer journey automation.
+
+What LobiLend can do better:
+
+- Serve small teams without enterprise implementation.
+- Focus on loan file execution instead of broad customer engagement.
+- Win on speed, simplicity, and operational clarity.
+
+Likely buyer fit:
+
+Lenders, banks, credit unions, and enterprise teams that need compliant customer engagement at scale.
+
+Strategic threat rating:
+
+Low-Medium. Total Expert is a market expectation benchmark, not a direct v1 competitor.
+
+
+### Jungo
+
+Sources:
+- https://ijungo.com/mortgage-crm/
+- https://ijungo.com/los-sync/
+
+How it operates:
+
+Jungo is a mortgage CRM built on Salesforce. Public pages emphasize lead management, marketing automation, repetitive task automation, SMS, referral partner programs, LOS sync, pipeline visibility, and automated status updates to borrowers and transaction partners.
+
+What it does better than LobiLend today:
+
+- Salesforce ecosystem and enterprise CRM foundation.
+- LOS sync and automation positioning.
+- Marketing and referral-partner tooling.
+- Mature CRM object model.
+
+What LobiLend can do better:
+
+- Avoid Salesforce complexity and admin overhead.
+- Be faster to set up for small teams.
+- Focus on active processing queues, not a full CRM migration.
+
+Likely buyer fit:
+
+Larger teams already comfortable with Salesforce or needing enterprise CRM flexibility.
+
+Strategic threat rating:
+
+Medium. Jungo can overlap in pipeline/task automation, but LobiLend should win on simplicity and active-file specificity.
+
+
+## 5. Market Gaps
+
+### Gap 1: Spreadsheet-to-system migration is underserved
+
+Many teams still operate from Excel-like processing trackers because the alternatives feel too broad, too borrower-portal-focused, or too expensive. A direct spreadsheet import/mapping workflow could be a major wedge:
+
+- Upload existing tracker.
+- Map columns to borrower, loan, title contact, realtor, closing date, ICD, and needs.
+- Generate a live dashboard and queue immediately.
+
+This is likely one of LobiLend's strongest near-term differentiators.
+
+### Gap 2: Internal processor execution is less visible than borrower document collection
+
+Borrower portals are common. Document needs lists are common. Less common is a crisp internal command center that asks:
+
+- Which loans are closing within 7 days?
+- Which ICDs are not sent or not signed?
+- Which title needs are blocking closing?
+- Which realtor needs are unresolved?
+- What did the team touch recently?
+- Which loan officer owns the next step?
+
+LobiLend should make internal operational visibility the product center.
+
+### Gap 3: Title and realtor work is under-emphasized
+
+Many tools describe borrower document requests better than title/realtor dependencies. LobiLend already models sections for Borrower, Title, and Realtor. This can become a meaningful wedge:
+
+- Title needs queue.
+- Realtor needs queue.
+- Partner-specific email templates.
+- Contact fields and activity history by party.
+- Closing-risk dashboard that explains whether the blocker is borrower, title, realtor, or internal.
+
+### Gap 4: Small teams need template-backed task generation without enterprise setup
+
+Floify, Maxwell, and broader systems validate rules/templates. The opportunity is a simpler version:
+
+- Purchase Processing template.
+- Refinance Processing template.
+- FHA/VA/Jumbo/Non-QM templates later.
+- One-click generation without duplicate open actions.
+- Easy editing by a team lead.
+
+### Gap 5: Pricing and onboarding can be simpler
+
+Some close competitors publish low-cost pricing. Others are expensive or enterprise/demo-led. LobiLend should choose a clear, transparent model for small teams:
+
+- Low monthly base plan.
+- Team seats.
+- No setup fee for self-service.
+- Paid onboarding/import assistance as optional.
+
+### Gap 6: Daily work queue beats broad dashboards
+
+Large dashboards often show too many metrics. A processor needs a small number of execution queues:
+
+- Overdue.
+- Due today.
+- Upcoming.
+- Closing soon.
+- ICD attention.
+- Borrower needs.
+- Title needs.
+- Realtor needs.
+
+LobiLend should keep the app operational and avoid CRM-style clutter.
+
+
+## 6. How LobiLend Can Win
+
+### 1. Own the active-file command center
+
+Do not describe LobiLend as a CRM, POS, or LOS. Use tighter language:
+
+"LobiLend is the active-file command center for mortgage teams that have outgrown spreadsheet processing trackers."
+
+### 2. Build the best processor-first dashboard
+
+The main dashboard should remain the daily work surface:
+
+- Overdue work.
+- Due-today work.
+- Closing soon.
+- ICD attention.
+- Open queue.
+- Borrower/title/realtor needs.
+- Fast action complete, reschedule, note, reassign, and email.
+
+### 3. Make spreadsheet import a wedge
+
+The fastest buyer path is likely:
+
+1. Upload the current tracker.
+2. Map the columns.
+3. See the live dashboard.
+4. Invite the team.
+5. Start working from LobiLend the same day.
+
+This directly attacks the current pain rather than asking teams to replace their entire technology stack.
+
+### 4. Add communication after internal workflow is excellent
+
+Borrower/realtor/title communications matter, but should be layered on top of a strong internal workflow:
+
+- Editable email drafts.
+- Send confirmation.
+- Template-based borrower/title/realtor messages.
+- Audit history of what was sent.
+- Later: automated reminders and partner links.
+
+### 5. Avoid full LOS replacement
+
+LobiLend should not make credit decisions, price loans, generate disclosures, or replace the LOS. The safer and clearer positioning is:
+
+- Works above the LOS.
+- Tracks operational needs and deadlines.
+- Provides export/integration paths.
+- Keeps the source of truth for regulated origination functions in the LOS.
+
+### 6. Compete on simplicity and operational clarity
+
+The biggest competitors are powerful but broad. LobiLend should remain:
+
+- Fast to understand.
+- Fast to onboard.
+- Clear on today's work.
+- Built for processors and small teams.
+- Cheaper and narrower than CRM/POS suites.
+
+
+## 7. Recommended Product Roadmap From Market Findings
+
+### Near term
+
+- Spreadsheet/XLSM import from existing tracker format.
+- Saved views for Borrower Needs, Title Needs, Realtor Needs, Closing Soon, and ICD Attention.
+- Better partner/contact activity history.
+- Email templates by section and action type.
+- Simple team assignment and workload view.
+
+### Mid term
+
+- Borrower/realtor/title secure links for selected needs.
+- Reminder scheduling with team approval controls.
+- Import/export integration with LOS/POS systems through CSV first, API later.
+- AI-generated action summaries and borrower/title/realtor email drafts.
+- File-risk scoring based on closing date, overdue actions, ICD status, and unresolved title/realtor needs.
+
+### Later
+
+- Borrower portal.
+- Document upload and review.
+- LOS integrations.
+- Partner/realtor hub.
+- Compliance review workflows for sent communications.
+
+
+## 8. Sources
+
+- BorrowerDocs: https://borrowerdocs.com/
+- WaveDesk: https://www.wavedesk.ai/
+- PipelineSteady: https://pipelinesteady.com/
+- Floify auto document needs: https://floify.com/blog/automate-mortgage-document-needs
+- Floify customization checklist: https://floify.com/blog/the-floify-customization-checklist
+- Floify notifications: https://floify.com/blog/managing-floify-notifications
+- Maxwell Borrower Tasks: https://docs.himaxwell.com/platform-overview/borrower-hub/borrower-tasks
+- Maxwell SmartTasks: https://knowledge.himaxwell.com/175328-for-lenders/smarttasks
+- BNTouch mortgage CRM: https://bntouch.com/mortgage-crm/
+- LoanOfficer.ai CRM: https://loanofficer.ai/crm
+- Total Expert: https://www.totalexpert.com/
+- Jungo mortgage CRM: https://ijungo.com/mortgage-crm/
+- Jungo LOS Sync: https://ijungo.com/los-sync/

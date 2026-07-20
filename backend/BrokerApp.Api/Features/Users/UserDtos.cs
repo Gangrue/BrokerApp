@@ -6,7 +6,8 @@ public sealed record UserListItemDto(
     string Email,
     string Role,
     bool IsActive,
-    bool EmailConfirmed);
+    bool EmailConfirmed,
+    IReadOnlyCollection<string> VisibleSidebarItems);
 
 public sealed record CurrentUserDto(
     Guid Id,
@@ -16,7 +17,8 @@ public sealed record CurrentUserDto(
     string Email,
     string Role,
     bool IsActive,
-    bool EmailConfirmed);
+    bool EmailConfirmed,
+    IReadOnlyCollection<string> VisibleSidebarItems);
 
 public sealed record CreateUserRequest(
     string DisplayName,
@@ -35,6 +37,9 @@ public sealed record ResendUserInvitationResponseDto(
 
 public sealed record UpdateUserStatusRequest(
     bool IsActive);
+
+public sealed record UpdateUserSidebarRequest(
+    IReadOnlyCollection<string> VisibleSidebarItems);
 
 public sealed record UserInvitationLinks(
     string ConfirmationLink,

@@ -30,6 +30,7 @@ public sealed class UserServiceTests
         Assert.Equal("Test Loan Officer", user.DisplayName);
         Assert.Equal("officer@example.test", user.Email);
         Assert.True(user.IsActive);
+        Assert.Contains("triage", user.VisibleSidebarItems);
     }
 
     [Fact]
@@ -132,6 +133,46 @@ public sealed class UserServiceTests
 
         await Assert.ThrowsAsync<UserValidationException>(() =>
             service.SetUserActiveAsync(DevDataIds.TeamLeadId, false));
+    }
+
+    [Fact]
+    public async Task UpdateSidebarItemsAsync_SavesUserVisibleNavigation()
+    {
+        var today = new DateOnly(2026, 7, 17);
+        await using var dbContext = CreateDbContext();
+        await DashboardTestData.SeedAsync(dbContext, today);
+        var service = CreateService(dbContext, TestCurrentUserContext.TeamLead, today: today);
+
+        var updated = await service.UpdateSidebarItemsAsync(
+            DevDataIds.LoanOfficerId,
+            new UpdateUserSidebarRequest(["home", "triage", "dashboard", "loans", "account"]));
+        var currentUserService = CreateService(dbContext, TestCurrentUserContext.Instance, today: today);
+        var currentUser = await currentUserService.GetCurrentUserAsync();
+
+        Assert.Equal(["home", "triage", "dashboard", "loans", "account"], updated.VisibleSidebarItems);
+        Assert.NotNull(currentUser);
+        Assert.Equal(["home", "triage", "dashboard", "loans", "account"], currentUser.VisibleSidebarItems);
+        Assert.Contains(dbContext.AuditEvents, audit => audit.EntityType == "User"
+            && audit.EntityId == DevDataIds.LoanOfficerId.ToString()
+            && audit.ChangedFields == "Sidebar navigation visibility updated.");
+    }
+
+    [Fact]
+    public async Task UpdateSidebarItemsAsync_KeepsTeamLeadSelfAdminVisible()
+    {
+        var today = new DateOnly(2026, 7, 17);
+        await using var dbContext = CreateDbContext();
+        await DashboardTestData.SeedAsync(dbContext, today);
+        var service = CreateService(dbContext, TestCurrentUserContext.TeamLead, today: today);
+
+        var updated = await service.UpdateSidebarItemsAsync(
+            DevDataIds.TeamLeadId,
+            new UpdateUserSidebarRequest(["dashboard"]));
+
+        Assert.Contains("home", updated.VisibleSidebarItems);
+        Assert.Contains("account", updated.VisibleSidebarItems);
+        Assert.Contains("admin", updated.VisibleSidebarItems);
+        Assert.Contains("dashboard", updated.VisibleSidebarItems);
     }
 
     [Fact]

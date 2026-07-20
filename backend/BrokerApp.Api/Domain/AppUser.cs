@@ -9,6 +9,7 @@ public sealed class AppUser : IdentityUser<Guid>
     public string DisplayName { get; set; } = string.Empty;
     public string Role { get; set; } = UserRoles.LoanOfficer;
     public bool IsActive { get; set; } = true;
+    public string? VisibleSidebarItemsJson { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; }
     public byte[] RowVersion { get; set; } = [];
 

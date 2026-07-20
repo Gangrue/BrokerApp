@@ -1,0 +1,5 @@
+Borrower Name,Loan #,Product,Milestone,Email,Phone,Amount,Close Date,Co-Borrower Email,Title Contact,Title Email,Realtor,Realtor Email,ICD Sent,ICD Signed,Last Contact,Notes
+Avery Stone,IMP-2001,Purchase,New file,avery.stone@example.com,555-0101,"$425,000.00",8/14/2026,casey.stone@example.com,Jordan Title,jordan.title@example.com,Riley Agent,riley.agent@example.com,Yes,No,7/18/2026,Borrower prefers weekly Friday updates.
+Lloyd Daw,IMP-2002,Refinance,Processing,lloyd.daw@example.com,555-0102,"$315,500.00",8/20/2026,,Morgan Escrow,morgan.escrow@example.com,,,No,No,7/17/2026,Waiting on updated mortgage statement.
+Maya Chen,IMP-2003,Purchase,Condition review,maya.chen@example.com,555-0103,"$612,750.00",8/25/2026,eric.chen@example.com,Taylor Closing,taylor.closing@example.com,Sam Realtor,sam.realtor@example.com,Yes,Yes,7/19/2026,Title confirmed preliminary CD timeline.
+Noah Rivera,IMP-2004,Purchase,Clear to close,noah.rivera@example.com,555-0104,"$289,000.00",7/24/2026,,Parker Title,parker.title@example.com,Alex Gomez,alex.gomez@example.com,Yes,No,7/20/2026,Closing soon; verify ICD signature before final docs.

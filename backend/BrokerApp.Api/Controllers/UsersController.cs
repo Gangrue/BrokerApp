@@ -59,6 +59,20 @@ public sealed class UsersController : ControllerBase
     }
 
     [Authorize(Roles = UserRoles.TeamLead)]
+    [HttpPut("{userId:guid}/sidebar")]
+    public async Task<ActionResult<UserListItemDto>> UpdateSidebar(Guid userId, UpdateUserSidebarRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _userService.UpdateSidebarItemsAsync(userId, request, cancellationToken));
+        }
+        catch (UserValidationException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+    }
+
+    [Authorize(Roles = UserRoles.TeamLead)]
     [HttpPost("{userId:guid}/resend-invitation")]
     public async Task<ActionResult<ResendUserInvitationResponseDto>> ResendInvitation(Guid userId, CancellationToken cancellationToken)
     {

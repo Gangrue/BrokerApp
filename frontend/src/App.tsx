@@ -4,6 +4,7 @@ import {
   addActionComment,
   AuthRequiredError,
   cancelAction,
+  commitLoanImport,
   completeAction,
   confirmEmail,
   createActionTemplate,
@@ -27,6 +28,7 @@ import {
   forgotPassword,
   login,
   logout,
+  previewLoanImport,
   reassignAction,
   register,
   resendUserInvitation,
@@ -35,6 +37,7 @@ import {
   updateActionTemplate,
   updateCustomer,
   updateLoan,
+  updateUserSidebar,
   updateUserStatus,
 } from './api'
 import type {
@@ -47,6 +50,8 @@ import type {
   DashboardSummary,
   CustomerDetail,
   CustomerListItem,
+  ImportCommitResponse,
+  ImportPreviewResponse,
   LoanActionDetail,
   LoanDetail,
   LoanListItem,
@@ -58,13 +63,21 @@ import familyImage from './assets/FamilyImage.png'
 import piggyImage from './assets/PiggyImage.webp'
 import './App.css'
 
-type WorkspaceView = 'home' | 'dashboard' | 'actionDetail' | 'loans' | 'loanDetail' | 'customers' | 'customerDetail' | 'reports' | 'admin' | 'account' | 'contact' | 'faq' | 'intake'
+type WorkspaceView = 'home' | 'dashboard' | 'actionDetail' | 'loans' | 'loanDetail' | 'customers' | 'customerDetail' | 'reports' | 'admin' | 'account' | 'contact' | 'faq' | 'intake' | 'import' | 'triage'
 type AuthView = 'login' | 'register' | 'forgotPassword' | 'resetPassword' | 'confirmEmail'
 type QueueFilter = 'all' | 'overdue' | 'today' | 'high'
 type DashboardSpotlightFilter = 'overdue' | 'today' | 'upcoming' | 'open' | 'closing'
 type DashboardPanelFlash = 'closing' | 'icd'
 type PendingNavigation = {
   action: () => void
+}
+
+type TriageScheduleStatus = {
+  caption: string
+  description: string
+  label: string
+  tone: 'ahead' | 'today' | 'behind'
+  value: string
 }
 
 const dashboardSpotlightTitles: Record<DashboardSpotlightFilter, string> = {
@@ -85,6 +98,21 @@ type BorrowerMode = 'new' | 'existing'
 const brandLogoMark = '/LobiLendJustLogoTransparent.png'
 const brandLogoText = '/LobiLendJustTextTransparent.png'
 const brandLogoAndText = '/LobiLendLogoAndTextTransparent.png'
+
+const sidebarNavItems = [
+  { id: 'home', label: 'Home', shortLabel: 'H', views: ['home'] },
+  { id: 'triage', label: 'Step-by-step', shortLabel: 'S', views: ['triage'] },
+  { id: 'dashboard', label: 'Dashboard', shortLabel: 'D', views: ['dashboard', 'actionDetail'] },
+  { id: 'loans', label: 'Loans', shortLabel: 'L', views: ['loans', 'loanDetail'] },
+  { id: 'customers', label: 'Customers', shortLabel: 'C', views: ['customers', 'customerDetail'] },
+  { id: 'import', label: 'Import', shortLabel: 'I', views: ['import'] },
+  { id: 'reports', label: 'Reports', shortLabel: 'R', views: ['reports'] },
+  { id: 'admin', label: 'Admin', shortLabel: 'A', views: ['admin'] },
+  { id: 'account', label: 'My Account', shortLabel: 'M', views: ['account'] },
+] as const
+
+const defaultSidebarNavItemIds = sidebarNavItems.map((item) => item.id)
+const triageSteps = ['Review', 'Outreach', 'Complete'] as const
 
 type LoginFormState = {
   email: string
@@ -302,6 +330,83 @@ function formatIcdStatus(icdSent: boolean, icdSigned: boolean) {
   }
 
   return 'Not sent'
+}
+
+function formatDateLabel(value: string) {
+  return formatDueDate(value)
+}
+
+function sortTriageActions(actions: DashboardAction[]) {
+  return [...actions].sort((first, second) => (
+    triageBucketRank(first.bucket) - triageBucketRank(second.bucket)
+    || triagePriorityRank(first.priority) - triagePriorityRank(second.priority)
+    || first.dueDate.localeCompare(second.dueDate)
+    || first.borrowerName.localeCompare(second.borrowerName)
+  ))
+}
+
+function triageBucketRank(bucket: string) {
+  if (bucket === 'Overdue') {
+    return 0
+  }
+
+  if (bucket === 'Due Today') {
+    return 1
+  }
+
+  return 2
+}
+
+function triagePriorityRank(priority: string) {
+  return priority === 'High' ? 0 : 1
+}
+
+function buildTriageScheduleStatus(actions: DashboardAction[]): TriageScheduleStatus {
+  if (actions.length === 0) {
+    return {
+      caption: 'No open work',
+      description: 'There are no open actions in the processor queue.',
+      label: 'All caught up',
+      tone: 'today',
+      value: '0',
+    }
+  }
+
+  const earliest = actions[0]
+  const dueDate = new Date(`${earliest.dueDate}T00:00:00`)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const dayDelta = Math.round((dueDate.getTime() - today.getTime()) / 86_400_000)
+
+  if (dayDelta < 0) {
+    const daysBehind = Math.abs(dayDelta)
+
+    return {
+      caption: `${daysBehind} day${daysBehind === 1 ? '' : 's'} behind`,
+      description: `The earliest open task was due ${formatDateLabel(earliest.dueDate)}.`,
+      label: 'Catch-up needed',
+      tone: 'behind',
+      value: `-${daysBehind}`,
+    }
+  }
+
+  if (dayDelta === 0) {
+    return {
+      caption: "Today's queue",
+      description: 'The earliest open task is due today.',
+      label: "Working on today's queue",
+      tone: 'today',
+      value: '0',
+    }
+  }
+
+  return {
+    caption: `${dayDelta} day${dayDelta === 1 ? '' : 's'} ahead`,
+    description: `The earliest open task is due ${formatDateLabel(earliest.dueDate)}.`,
+    label: `${dayDelta} day${dayDelta === 1 ? '' : 's'} ahead`,
+    tone: 'ahead',
+    value: `+${dayDelta}`,
+  }
 }
 
 function addDays(value: string, days: number) {
@@ -631,6 +736,10 @@ function App() {
   const [cleanCustomerDetailState, setCleanCustomerDetailState] = useState('')
   const [cleanLoanDetailState, setCleanLoanDetailState] = useState('')
   const [emailDraft, setEmailDraft] = useState<ActionEmailDraft | null>(null)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importTemplateId, setImportTemplateId] = useState('')
+  const [importPreview, setImportPreview] = useState<ImportPreviewResponse | null>(null)
+  const [importResult, setImportResult] = useState<ImportCommitResponse | null>(null)
   const [userInvitationLinks, setUserInvitationLinks] = useState<{ confirmation: string | null, reset: string | null } | null>(null)
   const [isEmailSendConfirmOpen, setIsEmailSendConfirmOpen] = useState(false)
   const [pendingDeleteLoanNumber, setPendingDeleteLoanNumber] = useState<string | null>(null)
@@ -639,6 +748,8 @@ function App() {
   const [isMutating, setIsMutating] = useState(false)
   const [isGeneratingEmailDraft, setIsGeneratingEmailDraft] = useState(false)
   const [isSubmittingIntake, setIsSubmittingIntake] = useState(false)
+  const [isPreviewingImport, setIsPreviewingImport] = useState(false)
+  const [isCommittingImport, setIsCommittingImport] = useState(false)
   const [isSubmittingCustomerLoan, setIsSubmittingCustomerLoan] = useState(false)
   const [isSavingTemplate, setIsSavingTemplate] = useState(false)
   const [isCreatingUser, setIsCreatingUser] = useState(false)
@@ -652,6 +763,11 @@ function App() {
   const [actionPage, setActionPage] = useState(0)
   const [customerPage, setCustomerPage] = useState(0)
   const [loanPage, setLoanPage] = useState(0)
+  const [triageActionIndex, setTriageActionIndex] = useState(0)
+  const [triageStepIndex, setTriageStepIndex] = useState(0)
+  const [triageReachedOutActionIds, setTriageReachedOutActionIds] = useState<string[]>([])
+  const [triageCompletedActionIds, setTriageCompletedActionIds] = useState<string[]>([])
+  const [triageSkippedActionIds, setTriageSkippedActionIds] = useState<string[]>([])
   const [authView, setAuthView] = useState<AuthView>(() => initialAuthView())
   const [authError, setAuthError] = useState<string | null>(null)
   const [authMessage, setAuthMessage] = useState<string | null>(null)
@@ -706,6 +822,9 @@ function App() {
     setSelectedTemplateId((current) => current && templateRows.some((template) => template.id === current)
       ? current
       : templateRows[0]?.id ?? null)
+    setImportTemplateId((current) => current && templateRows.some((template) => template.id === current && template.isActive)
+      ? current
+      : templateRows.find((template) => template.isActive)?.id ?? '')
     return { dashboardSummary, nextSelectedActionId }
   }
 
@@ -1011,6 +1130,15 @@ function App() {
     ?? null
   ), [filteredLoans, selectedLoanNumber])
 
+  const triageActions = useMemo(() => (
+    sortTriageActions(dashboard.openActions)
+  ), [dashboard.openActions])
+  const currentTriageActionIndex = Math.min(triageActionIndex, Math.max(triageActions.length - 1, 0))
+  const currentTriageAction = triageActions[currentTriageActionIndex] ?? null
+  const triageScheduleStatus = useMemo(() => (
+    buildTriageScheduleStatus(triageActions)
+  ), [triageActions])
+
   const adjustableDetailGridStyle = useMemo(() => ({
     '--detail-panel-width': `${detailPanelWidth}px`,
   }) as CSSProperties, [detailPanelWidth])
@@ -1096,6 +1224,11 @@ function App() {
   useEffect(() => {
     setActionPage(0)
   }, [queueFilter, dashboard.openActions.length])
+
+  useEffect(() => {
+    setTriageActionIndex((current) => Math.min(current, Math.max(triageActions.length - 1, 0)))
+    setTriageStepIndex((current) => Math.min(current, triageSteps.length - 1))
+  }, [triageActions.length])
 
   useEffect(() => {
     if (!workflowMessage) {
@@ -1712,6 +1845,83 @@ function App() {
     )
   }
 
+  function goToPreviousTriageStep() {
+    if (triageStepIndex > 0) {
+      setTriageStepIndex((current) => Math.max(current - 1, 0))
+      return
+    }
+
+    if (currentTriageActionIndex > 0) {
+      setTriageActionIndex((current) => Math.max(current - 1, 0))
+      setTriageStepIndex(triageSteps.length - 1)
+    }
+  }
+
+  function goToNextTriageStep() {
+    if (triageStepIndex < triageSteps.length - 1) {
+      setTriageStepIndex((current) => Math.min(current + 1, triageSteps.length - 1))
+      return
+    }
+
+    setTriageSkippedActionIds((current) => currentTriageAction && !current.includes(currentTriageAction.id)
+      ? [...current, currentTriageAction.id]
+      : current)
+    setTriageActionIndex((current) => Math.min(current + 1, Math.max(triageActions.length - 1, 0)))
+    setTriageStepIndex(0)
+  }
+
+  async function confirmTriageReachedOut() {
+    if (!currentTriageAction || triageReachedOutActionIds.includes(currentTriageAction.id)) {
+      goToNextTriageStep()
+      return
+    }
+
+    setIsMutating(true)
+    setBusyMessage('Adding triage note...')
+    setWorkflowMessage(null)
+    setError(null)
+
+    try {
+      await addActionComment(currentTriageAction.id, `Reached out to ${currentTriageAction.section} during morning triage.`)
+      setTriageReachedOutActionIds((current) => [...current, currentTriageAction.id])
+      await loadWorkspace(currentTriageAction.id)
+      setWorkflowMessage(`Outreach noted for ${currentTriageAction.id}.`)
+      setTriageStepIndex(2)
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Triage note failed')
+    } finally {
+      setBusyMessage(null)
+      setIsMutating(false)
+    }
+  }
+
+  async function completeTriageAction() {
+    if (!currentTriageAction) {
+      return
+    }
+
+    const completedActionId = currentTriageAction.id
+    setIsMutating(true)
+    setBusyMessage('Completing triage action...')
+    setWorkflowMessage(null)
+    setError(null)
+
+    try {
+      await completeAction(completedActionId)
+      const { dashboardSummary } = await loadWorkspace(null)
+      const nextQueue = sortTriageActions(dashboardSummary.openActions)
+      setTriageCompletedActionIds((current) => current.includes(completedActionId) ? current : [...current, completedActionId])
+      setTriageActionIndex((current) => Math.min(current, Math.max(nextQueue.length - 1, 0)))
+      setTriageStepIndex(0)
+      setWorkflowMessage(`${completedActionId} completed from morning triage.`)
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Triage completion failed')
+    } finally {
+      setBusyMessage(null)
+      setIsMutating(false)
+    }
+  }
+
   function cancelSelectedAction() {
     if (!selectedAction || !cancelReason.trim()) {
       return
@@ -2159,6 +2369,30 @@ function App() {
     }
   }
 
+  async function saveUserSidebarItems(user: UserListItem, visibleSidebarItems: string[]) {
+    setIsMutating(true)
+    setBusyMessage('Saving sidebar access...')
+    setWorkflowMessage(null)
+    setError(null)
+
+    try {
+      const updated = await updateUserSidebar(user.id, { visibleSidebarItems })
+      const refreshedUsers = await getUsers()
+      setUsers(refreshedUsers)
+
+      if (currentUser?.id === updated.id) {
+        setCurrentUser(await getCurrentUser())
+      }
+
+      setWorkflowMessage(`${updated.displayName} sidebar updated.`)
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Sidebar visibility update failed')
+    } finally {
+      setBusyMessage(null)
+      setIsMutating(false)
+    }
+  }
+
   function updateIntakeField(field: keyof Omit<IntakeFormState, 'actions'>, value: string | boolean) {
     setIntakeForm((current) => ({
       ...current,
@@ -2265,6 +2499,71 @@ function App() {
       setError(caughtError instanceof Error ? caughtError.message : 'Intake request failed')
     } finally {
       setIsSubmittingIntake(false)
+    }
+  }
+
+  function selectImportFile(file: File | null) {
+    setImportFile(file)
+    setImportPreview(null)
+    setImportResult(null)
+  }
+
+  async function submitImportPreview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsPreviewingImport(true)
+    setWorkflowMessage(null)
+    setError(null)
+    setImportResult(null)
+
+    if (!importFile) {
+      setError('Choose an XLSX, XLSM, or CSV file before previewing import.')
+      setIsPreviewingImport(false)
+      return
+    }
+
+    if (!importTemplateId) {
+      setError('Select an active action template before previewing import.')
+      setIsPreviewingImport(false)
+      return
+    }
+
+    try {
+      const preview = await previewLoanImport(importFile, importTemplateId)
+      setImportPreview(preview)
+      setWorkflowMessage(`${preview.summary.validRows} import rows ready, ${preview.summary.invalidRows + preview.summary.duplicateRows} need attention.`)
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Import preview failed')
+    } finally {
+      setIsPreviewingImport(false)
+    }
+  }
+
+  async function commitImportPreview() {
+    if (!importPreview) {
+      return
+    }
+
+    setIsCommittingImport(true)
+    setWorkflowMessage(null)
+    setError(null)
+
+    try {
+      const result = await commitLoanImport(importPreview.batchId)
+      setImportResult(result)
+      await loadWorkspace()
+
+      if (result.createdLoanNumbers[0]) {
+        setSelectedLoanNumber(result.createdLoanNumbers[0])
+        setView('loans')
+      }
+
+      setWorkflowMessage(
+        `Imported ${result.createdLoanNumbers.length} loans, generated ${result.createdActionCount} actions, rejected ${result.rejectedRowCount} rows.`,
+      )
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : 'Import commit failed')
+    } finally {
+      setIsCommittingImport(false)
     }
   }
 
@@ -2375,6 +2674,10 @@ function App() {
     )
   }
 
+  const activeUser = currentUser!
+  const visibleSidebarItemIds = new Set(activeUser.visibleSidebarItems?.length ? activeUser.visibleSidebarItems : defaultSidebarNavItemIds)
+  const visibleSidebarNavItems = sidebarNavItems.filter((item) => visibleSidebarItemIds.has(item.id))
+
   return (
     <>
     <main className={`app-shell ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`} onClickCapture={handleWorkspaceClickCapture}>
@@ -2398,34 +2701,18 @@ function App() {
           </span>
         </button>
         <nav>
-          <button className={view === 'home' ? 'active' : ''} title="Home" type="button" onClick={() => openSidebarView('home')}>
-            <span>H</span>
-            <strong>Home</strong>
-          </button>
-          <button className={view === 'dashboard' || view === 'actionDetail' ? 'active' : ''} title="Dashboard" type="button" onClick={() => openSidebarView('dashboard')}>
-            <span>D</span>
-            <strong>Dashboard</strong>
-          </button>
-          <button className={view === 'loans' || view === 'loanDetail' ? 'active' : ''} title="Loans" type="button" onClick={() => openSidebarView('loans')}>
-            <span>L</span>
-            <strong>Loans</strong>
-          </button>
-          <button className={view === 'customers' || view === 'customerDetail' ? 'active' : ''} title="Customers" type="button" onClick={() => openSidebarView('customers')}>
-            <span>C</span>
-            <strong>Customers</strong>
-          </button>
-          <button className={view === 'reports' ? 'active' : ''} title="Reports" type="button" onClick={() => openSidebarView('reports')}>
-            <span>R</span>
-            <strong>Reports</strong>
-          </button>
-          <button className={view === 'admin' ? 'active' : ''} title="Admin" type="button" onClick={() => openSidebarView('admin')}>
-            <span>A</span>
-            <strong>Admin</strong>
-          </button>
-          <button className={view === 'account' ? 'active' : ''} title="My Account" type="button" onClick={() => openSidebarView('account')}>
-            <span>M</span>
-            <strong>My Account</strong>
-          </button>
+          {visibleSidebarNavItems.map((item) => (
+            <button
+              className={(item.views as readonly string[]).includes(view) ? 'active' : ''}
+              key={item.id}
+              title={item.label}
+              type="button"
+              onClick={() => openSidebarView(item.id as WorkspaceView)}
+            >
+              <span>{item.shortLabel}</span>
+              <strong>{item.label}</strong>
+            </button>
+          ))}
         </nav>
         <div className="sidebar-footer">
           <button className="logout-button" type="button" onClick={logOutSession}>
@@ -2437,7 +2724,7 @@ function App() {
       <section className="workspace" id="dashboard">
         <header className="topbar">
           <div className="topbar-title" key={view}>
-            <p className="eyebrow">{view === 'intake' ? 'File intake' : view === 'home' ? 'Workspace home' : 'Daily workflow'}</p>
+            <p className="eyebrow">{view === 'intake' ? 'File intake' : view === 'import' ? 'Spreadsheet import' : view === 'home' ? 'Workspace home' : 'Daily workflow'}</p>
             <h1>
               {view === 'home' && 'Home'}
               {view === 'dashboard' && 'Processing dashboard'}
@@ -2452,11 +2739,15 @@ function App() {
             {view === 'contact' && 'Contact'}
             {view === 'faq' && 'FAQ'}
             {view === 'intake' && 'New file intake'}
+            {view === 'import' && 'Import files'}
+            {view === 'triage' && 'Processor morning triage'}
             </h1>
           </div>
           <div className="topbar-actions">
-            {view === 'intake' ? (
-              <button className="secondary" type="button" onClick={() => setView('dashboard')}>Cancel intake</button>
+            {view === 'intake' || view === 'import' ? (
+              <button className="secondary" type="button" onClick={() => setView(view === 'import' ? 'loans' : 'dashboard')}>
+                {view === 'import' ? 'Close import' : 'Cancel intake'}
+              </button>
             ) : (
               <>
                 {searchPlaceholder && (
@@ -2468,12 +2759,18 @@ function App() {
                   />
                 )}
                 <button type="button" onClick={() => setView('intake')}>Create New</button>
+                <button className="secondary" type="button" onClick={() => {
+                  setSearchTerm('')
+                  setView('import')
+                }}>
+                  Import
+                </button>
               </>
             )}
           </div>
         </header>
 
-        {view !== 'home' && view !== 'intake' && view !== 'account' && view !== 'contact' && view !== 'faq' && view !== 'admin' && view !== 'loanDetail' && view !== 'customerDetail' && view !== 'actionDetail' && (
+        {view !== 'home' && view !== 'intake' && view !== 'import' && view !== 'triage' && view !== 'account' && view !== 'contact' && view !== 'faq' && view !== 'admin' && view !== 'loanDetail' && view !== 'customerDetail' && view !== 'actionDetail' && (
           <section className="metrics" aria-label="Action summary">
             <button className="metric-card metric-overdue" type="button" onClick={() => openDashboardSpotlight('overdue')}>
               <span>Overdue</span>
@@ -2530,6 +2827,23 @@ function App() {
             onUpdateAction={updateIntakeAction}
             onUpdateField={updateIntakeField}
           />
+        ) : view === 'import' ? (
+          <ImportPage
+            disabled={isPreviewingImport || isCommittingImport}
+            file={importFile}
+            preview={importPreview}
+            result={importResult}
+            templateId={importTemplateId}
+            templates={templates.filter((template) => template.isActive)}
+            onCommit={commitImportPreview}
+            onSelectFile={selectImportFile}
+            onSubmitPreview={submitImportPreview}
+            onTemplateChange={(templateId) => {
+              setImportTemplateId(templateId)
+              setImportPreview(null)
+              setImportResult(null)
+            }}
+          />
         ) : view === 'home' ? (
           <HomePage
             currentUser={currentUser}
@@ -2546,13 +2860,35 @@ function App() {
               setView('dashboard')
             }}
             onOpenIntake={() => setView('intake')}
+            onOpenImport={() => setView('import')}
             onOpenLoans={() => {
               setSelectedLoanNumber(null)
               setView('loans')
             }}
+            onOpenTriage={() => {
+              setSearchTerm('')
+              setView('triage')
+            }}
             onOpenActivity={openReportActivity}
             recentActivity={reportSummary.recentActivity}
             templateCount={templates.length}
+          />
+        ) : view === 'triage' ? (
+          <ProcessorMorningTriagePage
+            action={currentTriageAction}
+            actionIndex={currentTriageActionIndex}
+            completedCount={triageCompletedActionIds.length}
+            disabled={isMutating}
+            reachedOutActionIds={triageReachedOutActionIds}
+            scheduleStatus={triageScheduleStatus}
+            skippedCount={triageSkippedActionIds.length}
+            stepIndex={triageStepIndex}
+            totalActions={triageActions.length}
+            onCompleteAction={completeTriageAction}
+            onNext={goToNextTriageStep}
+            onPrevious={goToPreviousTriageStep}
+            onReachedOutNo={goToNextTriageStep}
+            onReachedOutYes={confirmTriageReachedOut}
           />
         ) : view === 'dashboard' ? (
           <>
@@ -2851,6 +3187,7 @@ function App() {
             onNewTemplate={startNewTemplate}
             onResendInvitation={resendInvitation}
             onRemoveItem={removeTemplateItem}
+            onSaveUserSidebar={saveUserSidebarItems}
             onSubmitUser={submitUserCreate}
             onSelectTemplate={setSelectedTemplateId}
             onSubmit={submitTemplate}
@@ -3052,6 +3389,155 @@ function DashboardAlertList({
   )
 }
 
+function ProcessorMorningTriagePage({
+  action,
+  actionIndex,
+  completedCount,
+  disabled,
+  reachedOutActionIds,
+  scheduleStatus,
+  skippedCount,
+  stepIndex,
+  totalActions,
+  onCompleteAction,
+  onNext,
+  onPrevious,
+  onReachedOutNo,
+  onReachedOutYes,
+}: {
+  action: DashboardAction | null
+  actionIndex: number
+  completedCount: number
+  disabled: boolean
+  reachedOutActionIds: string[]
+  scheduleStatus: TriageScheduleStatus
+  skippedCount: number
+  stepIndex: number
+  totalActions: number
+  onCompleteAction: () => void
+  onNext: () => void
+  onPrevious: () => void
+  onReachedOutNo: () => void
+  onReachedOutYes: () => void
+}) {
+  const step = triageSteps[stepIndex]
+  const hasReachedOut = action ? reachedOutActionIds.includes(action.id) : false
+  const canGoPrevious = actionIndex > 0 || stepIndex > 0
+  const canGoNext = Boolean(action) && (stepIndex < triageSteps.length - 1 || actionIndex < totalActions - 1)
+
+  if (!action) {
+    return (
+      <section className="triage-page">
+        <section className="panel triage-empty-panel">
+          <span className="triage-kicker">Processor Morning Triage</span>
+          <h2>All caught up</h2>
+          <p>No open action items are available in the queue.</p>
+        </section>
+      </section>
+    )
+  }
+
+  return (
+    <section className="triage-page">
+      <section className="panel triage-status-panel">
+        <div>
+          <span className="triage-kicker">Processor Morning Triage</span>
+          <h2>{scheduleStatus.label}</h2>
+          <p>{scheduleStatus.description}</p>
+        </div>
+        <div className={`triage-ahead-card ${scheduleStatus.tone}`}>
+          <strong>{scheduleStatus.value}</strong>
+          <span>{scheduleStatus.caption}</span>
+        </div>
+      </section>
+
+      <section className="panel triage-work-panel">
+        <div className="panel-header">
+          <div>
+            <h2>{action.title}</h2>
+            <p>Action {actionIndex + 1} of {totalActions}</p>
+          </div>
+          <span className={`status ${action.bucket === 'Overdue' ? 'danger' : action.bucket === 'Due Today' ? 'warning' : ''}`}>
+            {action.bucket}
+          </span>
+        </div>
+
+        <div className="triage-action-summary">
+          <article>
+            <span>Borrower</span>
+            <strong>{action.borrowerName}</strong>
+          </article>
+          <article>
+            <span>Loan</span>
+            <strong>{action.loanNumber}</strong>
+          </article>
+          <article>
+            <span>Section</span>
+            <strong>{action.section}</strong>
+          </article>
+          <article>
+            <span>Due</span>
+            <strong>{formatDateLabel(action.dueDate)}</strong>
+          </article>
+          <article>
+            <span>Priority</span>
+            <strong>{action.priority}</strong>
+          </article>
+        </div>
+
+        <div className="triage-progress-track" aria-label="Triage steps">
+          {triageSteps.map((item, index) => (
+            <span className={index <= stepIndex ? 'active' : ''} key={item}>
+              {item}
+            </span>
+          ))}
+        </div>
+
+        <section className="triage-prompt-card">
+          {step === 'Review' && (
+            <>
+              <span>Step 1</span>
+              <h3>Review this action and loan context.</h3>
+              <p>Confirm the borrower, loan number, section, due date, and priority before taking action.</p>
+              <button disabled={disabled} type="button" onClick={onNext}>Next</button>
+            </>
+          )}
+
+          {step === 'Outreach' && (
+            <>
+              <span>Step 2</span>
+              <h3>Have you reached out to {action.section}?</h3>
+              <p>{hasReachedOut ? 'Outreach has already been noted for this triage pass.' : 'Answering yes will add a note to this action.'}</p>
+              <div className="triage-prompt-actions">
+                <button disabled={disabled || hasReachedOut} type="button" onClick={onReachedOutYes}>Yes</button>
+                <button className="secondary" disabled={disabled} type="button" onClick={onReachedOutNo}>No</button>
+              </div>
+            </>
+          )}
+
+          {step === 'Complete' && (
+            <>
+              <span>Step 3</span>
+              <h3>Have you completed this action?</h3>
+              <p>Answering yes completes the action and removes it from the open queue after refresh.</p>
+              <div className="triage-prompt-actions">
+                <button disabled={disabled} type="button" onClick={onCompleteAction}>Yes, complete</button>
+                <button className="secondary" disabled={disabled} type="button" onClick={onNext}>No, next action</button>
+              </div>
+            </>
+          )}
+        </section>
+
+        <div className="triage-footer-actions">
+          <button className="secondary" disabled={disabled || !canGoPrevious} type="button" onClick={onPrevious}>Previous</button>
+          <small>{completedCount} completed, {skippedCount} skipped this session</small>
+          <button className="secondary" disabled={disabled || !canGoNext} type="button" onClick={onNext}>Next</button>
+        </div>
+      </section>
+    </section>
+  )
+}
+
 function ListPagination({
   currentPage,
   itemLabel,
@@ -3099,6 +3585,172 @@ function DetailPanelResizeHandle({
   )
 }
 
+function ImportPage({
+  disabled,
+  file,
+  preview,
+  result,
+  templateId,
+  templates,
+  onCommit,
+  onSelectFile,
+  onSubmitPreview,
+  onTemplateChange,
+}: {
+  disabled: boolean
+  file: File | null
+  preview: ImportPreviewResponse | null
+  result: ImportCommitResponse | null
+  templateId: string
+  templates: ActionTemplateListItem[]
+  onCommit: () => void
+  onSelectFile: (file: File | null) => void
+  onSubmitPreview: (event: FormEvent<HTMLFormElement>) => void
+  onTemplateChange: (templateId: string) => void
+}) {
+  const hasValidRows = (preview?.summary.validRows ?? 0) > 0
+
+  return (
+    <section className="import-page">
+      <section className="panel import-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Import loan files</h2>
+            <p>Upload a tracker spreadsheet, verify mapped rows, then commit valid loans.</p>
+          </div>
+        </div>
+
+        <form className="import-form" onSubmit={onSubmitPreview}>
+          <label>
+            Import file
+            <input
+              accept=".xlsx,.xlsm,.csv"
+              disabled={disabled}
+              type="file"
+              onChange={(event) => onSelectFile(event.target.files?.[0] ?? null)}
+            />
+          </label>
+          <label>
+            Action template
+            <select disabled={disabled || templates.length === 0} required value={templateId} onChange={(event) => onTemplateChange(event.target.value)}>
+              <option value="">Select active template</option>
+              {templates.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name} ({template.loanType} / {template.stage})
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="import-form-actions">
+            <button disabled={disabled || !file || !templateId} type="submit">
+              Preview import
+            </button>
+            {file && <small>{file.name}</small>}
+          </div>
+        </form>
+      </section>
+
+      {preview && (
+        <section className="panel import-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Preview results</h2>
+              <p>Header row {preview.detectedHeaderRow} detected in {preview.fileName}</p>
+            </div>
+            <button disabled={disabled || !hasValidRows} type="button" onClick={onCommit}>
+              Commit valid rows
+            </button>
+          </div>
+
+          <div className="import-summary-grid">
+            <article>
+              <span>Total rows</span>
+              <strong>{preview.summary.totalRows}</strong>
+            </article>
+            <article className="success">
+              <span>Ready</span>
+              <strong>{preview.summary.validRows}</strong>
+            </article>
+            <article className="warning">
+              <span>Duplicates</span>
+              <strong>{preview.summary.duplicateRows}</strong>
+            </article>
+            <article className="danger">
+              <span>Invalid</span>
+              <strong>{preview.summary.invalidRows}</strong>
+            </article>
+          </div>
+
+          <div className="import-mapped-columns">
+            <h3>Mapped columns</h3>
+            <div>
+              {preview.mappedColumns.map((column) => (
+                <span key={`${column.field}-${column.columnIndex}`}>
+                  {column.header} -&gt; {column.field}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="import-table-wrap">
+            <div className="import-table" role="table" aria-label="Import preview rows">
+              <div className="import-row import-row-header" role="row">
+                <span>Row</span>
+                <span>Status</span>
+                <span>Loan</span>
+                <span>Borrower</span>
+                <span>Messages</span>
+              </div>
+              {preview.rows.map((row) => (
+                <div className={`import-row ${row.status.toLowerCase()}`} key={row.id} role="row">
+                  <span>{row.rowNumber}</span>
+                  <span>{row.status}</span>
+                  <span>{row.loanNumber ?? 'Missing'}</span>
+                  <span>{row.borrowerName ?? 'Missing'}</span>
+                  <span>
+                    {[...row.errors, ...row.warnings].length > 0
+                      ? [...row.errors, ...row.warnings].join(' ')
+                      : 'Ready to import'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {result && (
+        <section className="panel import-panel">
+          <div className="panel-header">
+            <div>
+              <h2>Import complete</h2>
+              <p>{result.createdLoanNumbers.length} loans created, {result.rejectedRowCount} rows rejected.</p>
+            </div>
+          </div>
+          <div className="import-summary-grid">
+            <article className="success">
+              <span>Customers created</span>
+              <strong>{result.createdCustomerCount}</strong>
+            </article>
+            <article>
+              <span>Customers matched</span>
+              <strong>{result.matchedCustomerCount}</strong>
+            </article>
+            <article>
+              <span>Actions generated</span>
+              <strong>{result.createdActionCount}</strong>
+            </article>
+            <article className="warning">
+              <span>Duplicates skipped</span>
+              <strong>{result.skippedDuplicateCount}</strong>
+            </article>
+          </div>
+        </section>
+      )}
+    </section>
+  )
+}
+
 function HomePage({
   currentUser,
   customerCount,
@@ -3107,8 +3759,10 @@ function HomePage({
   onOpenAdmin,
   onOpenCustomers,
   onOpenDashboard,
+  onOpenImport,
   onOpenIntake,
   onOpenLoans,
+  onOpenTriage,
   onOpenActivity,
   recentActivity,
   templateCount,
@@ -3120,8 +3774,10 @@ function HomePage({
   onOpenAdmin: () => void
   onOpenCustomers: () => void
   onOpenDashboard: () => void
+  onOpenImport: () => void
   onOpenIntake: () => void
   onOpenLoans: () => void
+  onOpenTriage: () => void
   onOpenActivity: (activity: ReportSummary['recentActivity'][number]) => void
   recentActivity: ReportSummary['recentActivity']
   templateCount: number
@@ -3173,6 +3829,7 @@ function HomePage({
           </div>
           <div className="home-hero-actions">
             <button type="button" onClick={onOpenDashboard}>Review queue</button>
+            <button className="secondary" type="button" onClick={onOpenTriage}>Step-by-step</button>
             <button type="button" onClick={onOpenIntake}>Create New</button>
           </div>
         </div>
@@ -3225,6 +3882,11 @@ function HomePage({
           <strong>{templateCount}</strong>
           <small>Reusable borrower/title/realtor action sets</small>
         </button>
+        <button className="home-summary-card" type="button" onClick={onOpenImport}>
+          <span>Import</span>
+          <strong>XLSX</strong>
+          <small>Preview spreadsheet rows before creating loans</small>
+        </button>
       </section>
 
       <section className="panel home-panel">
@@ -3239,6 +3901,10 @@ function HomePage({
             <strong>Clear urgent actions</strong>
             <small>Review overdue, due-today, and ICD attention files.</small>
           </button>
+          <button type="button" onClick={onOpenTriage}>
+            <strong>Processor morning triage</strong>
+            <small>Walk through the most urgent open action one step at a time.</small>
+          </button>
           <button type="button" onClick={onOpenLoans}>
             <strong>Audit loan details</strong>
             <small>Check closing dates, contacts, and open condition counts.</small>
@@ -3246,6 +3912,10 @@ function HomePage({
           <button type="button" onClick={onOpenAdmin}>
             <strong>Tune templates</strong>
             <small>Refine required action sets before importing real files.</small>
+          </button>
+          <button type="button" onClick={onOpenImport}>
+            <strong>Import pipeline rows</strong>
+            <small>Bring spreadsheet trackers into LobiLend with duplicate checks.</small>
           </button>
         </div>
       </section>
@@ -4206,7 +4876,7 @@ function MyAccountPage({
   )
 }
 
-type AdminAccordionSection = 'templates' | 'users' | 'invite'
+type AdminAccordionSection = 'templates' | 'users' | 'sidebar' | 'invite'
 
 function AdminTemplatesPage({
   disabled,
@@ -4224,6 +4894,7 @@ function AdminTemplatesPage({
   onNewTemplate,
   onResendInvitation,
   onRemoveItem,
+  onSaveUserSidebar,
   onSubmitUser,
   onSelectTemplate,
   onSubmit,
@@ -4246,6 +4917,7 @@ function AdminTemplatesPage({
   onNewTemplate: () => void
   onResendInvitation: (user: UserListItem) => void
   onRemoveItem: (index: number) => void
+  onSaveUserSidebar: (user: UserListItem, visibleSidebarItems: string[]) => void
   onSubmitUser: (event: FormEvent<HTMLFormElement>) => void
   onSelectTemplate: (id: string | null) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
@@ -4259,6 +4931,7 @@ function AdminTemplatesPage({
   const [openSections, setOpenSections] = useState<AdminAccordionSection[]>([])
   const isTemplatesOpen = openSections.includes('templates')
   const isUsersOpen = openSections.includes('users')
+  const isSidebarOpen = openSections.includes('sidebar')
   const isInviteOpen = openSections.includes('invite')
   const isTemplateSaveDisabled = disabled || form.items.length === 0
 
@@ -4268,6 +4941,28 @@ function AdminTemplatesPage({
         ? current.filter((item) => item !== section)
         : [...current, section]
     ))
+  }
+
+  function isLockedSidebarItem(user: UserListItem, itemId: string) {
+    return itemId === 'home'
+      || itemId === 'account'
+      || (currentUser?.id === user.id && user.role === 'Team Lead' && itemId === 'admin')
+  }
+
+  function sidebarItemsFor(user: UserListItem) {
+    return user.visibleSidebarItems?.length ? user.visibleSidebarItems : defaultSidebarNavItemIds
+  }
+
+  function toggleSidebarItem(user: UserListItem, itemId: string, isChecked: boolean) {
+    const currentItems = new Set(sidebarItemsFor(user))
+
+    if (isChecked) {
+      currentItems.add(itemId)
+    } else {
+      currentItems.delete(itemId)
+    }
+
+    onSaveUserSidebar(user, [...currentItems])
   }
 
   return (
@@ -4523,6 +5218,60 @@ function AdminTemplatesPage({
                 ))}
               </section>
             )}
+          </div>
+        )}
+      </section>
+
+      <section className={`panel admin-accordion-panel ${isSidebarOpen ? 'open' : ''}`}>
+        <button
+          aria-expanded={isSidebarOpen}
+          className="admin-accordion-trigger"
+          type="button"
+          onClick={() => toggleAdminSection('sidebar')}
+        >
+          <span>
+            <strong>Sidebar navigation</strong>
+            <small>Choose which tabs each user sees</small>
+          </span>
+          <em>{isSidebarOpen ? '-' : '+'}</em>
+        </button>
+
+        {isSidebarOpen && (
+          <div className="admin-accordion-body admin-sidebar-visibility">
+            {!canCreateUsers && (
+              <p className="state-message">Only Team Leads can edit sidebar visibility.</p>
+            )}
+            {activeUsers.map((user) => {
+              const visibleItems = new Set(sidebarItemsFor(user))
+
+              return (
+                <article className="admin-sidebar-user" key={user.id}>
+                  <div>
+                    <strong>{user.displayName}</strong>
+                    <small>{user.email}</small>
+                  </div>
+                  <div className="admin-sidebar-checkbox-grid">
+                    {sidebarNavItems.map((item) => {
+                      const isLocked = isLockedSidebarItem(user, item.id)
+                      const isChecked = isLocked || visibleItems.has(item.id)
+
+                      return (
+                        <label className="check-label" key={item.id}>
+                          <input
+                            checked={isChecked}
+                            disabled={!canCreateUsers || isLocked}
+                            type="checkbox"
+                            onChange={(event) => toggleSidebarItem(user, item.id, event.target.checked)}
+                          />
+                          {item.label}
+                        </label>
+                      )
+                    })}
+                  </div>
+                </article>
+              )
+            })}
+            {activeUsers.length === 0 && <p className="state-message">No active users found.</p>}
           </div>
         )}
       </section>

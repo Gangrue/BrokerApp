@@ -6,6 +6,7 @@ using BrokerApp.Api.Features.Dashboard;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Encodings.Web;
+using System.Text.Json;
 
 namespace BrokerApp.Api.Features.Users;
 
@@ -16,10 +17,25 @@ public interface IUserService
     Task<CreateUserResponseDto> CreateUserAsync(CreateUserRequest request, CancellationToken cancellationToken = default);
     Task<ResendUserInvitationResponseDto> ResendInvitationAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<UserListItemDto> SetUserActiveAsync(Guid userId, bool isActive, CancellationToken cancellationToken = default);
+    Task<UserListItemDto> UpdateSidebarItemsAsync(Guid userId, UpdateUserSidebarRequest request, CancellationToken cancellationToken = default);
 }
 
 public sealed class UserService : IUserService
 {
+    private static readonly string[] DefaultVisibleSidebarItems =
+    [
+        "home",
+        "triage",
+        "dashboard",
+        "loans",
+        "customers",
+        "import",
+        "reports",
+        "admin",
+        "account"
+    ];
+    private static readonly HashSet<string> AllowedSidebarItems = new(DefaultVisibleSidebarItems, StringComparer.OrdinalIgnoreCase);
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly BrokerAppDbContext _dbContext;
     private readonly UserManager<AppUser> _userManager;
     private readonly ICurrentUserContext _currentUser;
@@ -51,27 +67,27 @@ public sealed class UserService : IUserService
 
     public async Task<IReadOnlyCollection<UserListItemDto>> GetUsersAsync(CancellationToken cancellationToken = default)
     {
-        return await _dbContext.Users
+        var users = await _dbContext.Users
             .AsNoTracking()
             .Where(user => user.OrganizationId == _currentUser.OrganizationId)
             .OrderBy(user => user.DisplayName)
-            .Select(user => new UserListItemDto(
-                user.Id,
-                user.DisplayName,
-                user.Email ?? string.Empty,
-                user.Role,
-                user.IsActive,
-                user.EmailConfirmed))
             .ToArrayAsync(cancellationToken);
+
+        return users.Select(ToListItem).ToArray();
     }
 
     public async Task<CurrentUserDto?> GetCurrentUserAsync(CancellationToken cancellationToken = default)
     {
-        return await _dbContext.Users
+        var user = await _dbContext.Users
             .AsNoTracking()
             .Include(user => user.Organization)
-            .Where(user => user.OrganizationId == _currentUser.OrganizationId && user.Id == _currentUser.UserId)
-            .Select(user => new CurrentUserDto(
+            .SingleOrDefaultAsync(
+                user => user.OrganizationId == _currentUser.OrganizationId && user.Id == _currentUser.UserId,
+                cancellationToken);
+
+        return user is null
+            ? null
+            : new CurrentUserDto(
                 user.Id,
                 user.OrganizationId,
                 user.Organization.Name,
@@ -79,8 +95,8 @@ public sealed class UserService : IUserService
                 user.Email ?? string.Empty,
                 user.Role,
                 user.IsActive,
-                user.EmailConfirmed))
-            .SingleOrDefaultAsync(cancellationToken);
+                user.EmailConfirmed,
+                VisibleSidebarItems(user));
     }
 
     public async Task<CreateUserResponseDto> CreateUserAsync(CreateUserRequest request, CancellationToken cancellationToken = default)
@@ -113,6 +129,7 @@ public sealed class UserService : IUserService
             EmailConfirmed = false,
             Role = role,
             IsActive = true,
+            VisibleSidebarItemsJson = SerializeSidebarItems(DefaultVisibleSidebarItems),
             CreatedAtUtc = _clock.UtcNow
         };
 
@@ -132,9 +149,37 @@ public sealed class UserService : IUserService
                 user.Email ?? string.Empty,
                 user.Role,
                 user.IsActive,
-                user.EmailConfirmed),
+                user.EmailConfirmed,
+                VisibleSidebarItems(user)),
             _environment.IsDevelopment() ? links.ConfirmationLink : null,
             _environment.IsDevelopment() ? links.PasswordResetLink : null);
+    }
+
+    public async Task<UserListItemDto> UpdateSidebarItemsAsync(
+        Guid userId,
+        UpdateUserSidebarRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (_currentUser.Role != UserRoles.TeamLead)
+        {
+            throw new UnauthorizedAccessException("Only Team Leads can manage user sidebar visibility.");
+        }
+
+        var user = await _dbContext.Users
+            .Where(item => item.OrganizationId == _currentUser.OrganizationId && item.Id == userId)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new UserValidationException("User was not found.");
+        var visibleItems = NormalizeSidebarItems(request.VisibleSidebarItems, user.Id == _currentUser.UserId, user.Role);
+        user.VisibleSidebarItemsJson = SerializeSidebarItems(visibleItems);
+
+        _auditWriter.Record(
+            "User",
+            user.Id.ToString(),
+            AuditOperations.Updated,
+            "Sidebar navigation visibility updated.");
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return ToListItem(user);
     }
 
     public async Task<UserListItemDto> SetUserActiveAsync(Guid userId, bool isActive, CancellationToken cancellationToken = default)
@@ -267,7 +312,64 @@ public sealed class UserService : IUserService
             user.Email ?? string.Empty,
             user.Role,
             user.IsActive,
-            user.EmailConfirmed);
+            user.EmailConfirmed,
+            VisibleSidebarItems(user));
+    }
+
+    private static IReadOnlyCollection<string> NormalizeSidebarItems(
+        IReadOnlyCollection<string>? visibleItems,
+        bool isCurrentUser,
+        string role)
+    {
+        var normalized = (visibleItems ?? [])
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Select(item => item.Trim().ToLowerInvariant())
+            .Where(item => AllowedSidebarItems.Contains(item))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        EnsureVisible(normalized, "home");
+        EnsureVisible(normalized, "account");
+
+        if (isCurrentUser && role == UserRoles.TeamLead)
+        {
+            EnsureVisible(normalized, "admin");
+        }
+
+        return DefaultVisibleSidebarItems
+            .Where(item => normalized.Contains(item, StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+    }
+
+    private static void EnsureVisible(List<string> visibleItems, string item)
+    {
+        if (!visibleItems.Contains(item, StringComparer.OrdinalIgnoreCase))
+        {
+            visibleItems.Add(item);
+        }
+    }
+
+    private static IReadOnlyCollection<string> VisibleSidebarItems(AppUser user)
+    {
+        if (string.IsNullOrWhiteSpace(user.VisibleSidebarItemsJson))
+        {
+            return DefaultVisibleSidebarItems;
+        }
+
+        try
+        {
+            var items = JsonSerializer.Deserialize<IReadOnlyCollection<string>>(user.VisibleSidebarItemsJson, JsonOptions);
+            return NormalizeSidebarItems(items, false, user.Role);
+        }
+        catch (JsonException)
+        {
+            return DefaultVisibleSidebarItems;
+        }
+    }
+
+    private static string SerializeSidebarItems(IReadOnlyCollection<string> visibleItems)
+    {
+        return JsonSerializer.Serialize(visibleItems, JsonOptions);
     }
 }
 

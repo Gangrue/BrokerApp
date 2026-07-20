@@ -32,6 +32,8 @@ public sealed class BrokerAppDbContext : IdentityDbContext<AppUser, IdentityRole
     public DbSet<ActionTemplate> ActionTemplates => Set<ActionTemplate>();
     public DbSet<ActionTemplateItem> ActionTemplateItems => Set<ActionTemplateItem>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
+    public DbSet<ImportBatchRow> ImportBatchRows => Set<ImportBatchRow>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -63,6 +65,7 @@ public sealed class BrokerAppDbContext : IdentityDbContext<AppUser, IdentityRole
             entity.Property(e => e.DisplayName).HasMaxLength(200).IsRequired();
             entity.Property(e => e.Email).HasMaxLength(320);
             entity.Property(e => e.Role).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.VisibleSidebarItemsJson).HasColumnType("jsonb");
             if (_usesDatabaseGeneratedRowVersion)
             {
                 entity.Property(e => e.RowVersion).IsRowVersion();
@@ -257,6 +260,46 @@ public sealed class BrokerAppDbContext : IdentityDbContext<AppUser, IdentityRole
             entity.HasOne(e => e.ActorUser)
                 .WithMany()
                 .HasForeignKey(e => e.ActorUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ImportBatch>(entity =>
+        {
+            entity.Property(e => e.FileName).HasMaxLength(260).IsRequired();
+            entity.Property(e => e.FileType).HasMaxLength(20).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(40).IsRequired();
+            entity.Property(e => e.MappedColumnsJson).HasColumnType("jsonb").IsRequired();
+            entity.HasIndex(e => new { e.OrganizationId, e.CreatedAtUtc });
+            entity.HasOne(e => e.Organization)
+                .WithMany()
+                .HasForeignKey(e => e.OrganizationId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(e => e.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Template)
+                .WithMany()
+                .HasForeignKey(e => e.TemplateId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ImportBatchRow>(entity =>
+        {
+            entity.Property(e => e.ValidationStatus).HasMaxLength(40).IsRequired();
+            entity.Property(e => e.RawValuesJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(e => e.NormalizedValuesJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(e => e.ErrorsJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(e => e.WarningsJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(e => e.CreatedLoanNumber).HasMaxLength(50);
+            entity.HasIndex(e => new { e.ImportBatchId, e.RowNumber });
+            entity.HasOne(e => e.ImportBatch)
+                .WithMany(e => e.Rows)
+                .HasForeignKey(e => e.ImportBatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Customer)
+                .WithMany()
+                .HasForeignKey(e => e.CustomerId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }

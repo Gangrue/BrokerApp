@@ -345,6 +345,7 @@ export type UserListItem = {
   role: string
   isActive: boolean
   emailConfirmed: boolean
+  visibleSidebarItems: string[]
 }
 
 export type CurrentUser = {
@@ -356,6 +357,7 @@ export type CurrentUser = {
   role: string
   isActive: boolean
   emailConfirmed: boolean
+  visibleSidebarItems: string[]
 }
 
 export type AuthResult = {
@@ -404,6 +406,10 @@ export type UpdateUserStatusRequest = {
   isActive: boolean
 }
 
+export type UpdateUserSidebarRequest = {
+  visibleSidebarItems: string[]
+}
+
 export type ActionTemplateDetail = {
   id: string
   name: string
@@ -443,6 +449,49 @@ export type GenerateLoanActionsResponse = {
   templateId: string
   createdActionIds: string[]
   skippedCount: number
+}
+
+export type ImportMappedColumn = {
+  field: string
+  header: string
+  columnIndex: number
+}
+
+export type ImportRowPreview = {
+  id: string
+  rowNumber: number
+  status: string
+  loanNumber: string | null
+  borrowerName: string | null
+  errors: string[]
+  warnings: string[]
+}
+
+export type ImportPreviewSummary = {
+  totalRows: number
+  validRows: number
+  invalidRows: number
+  duplicateRows: number
+}
+
+export type ImportPreviewResponse = {
+  batchId: string
+  fileName: string
+  templateId: string
+  detectedHeaderRow: number
+  mappedColumns: ImportMappedColumn[]
+  rows: ImportRowPreview[]
+  summary: ImportPreviewSummary
+}
+
+export type ImportCommitResponse = {
+  batchId: string
+  createdLoanNumbers: string[]
+  createdCustomerCount: number
+  matchedCustomerCount: number
+  createdActionCount: number
+  skippedDuplicateCount: number
+  rejectedRowCount: number
 }
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -618,6 +667,43 @@ async function sendJson<T>(method: 'POST' | 'PUT' | 'DELETE', url: string, body?
   return text ? JSON.parse(text) as T : undefined as T
 }
 
+async function postForm<T>(url: string, body: FormData): Promise<T> {
+  const token = await ensureCsrfToken()
+  let response = await fetch(apiUrl(url), {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'X-XSRF-TOKEN': token,
+    },
+    body,
+  })
+
+  if (await shouldRetryWithFreshCsrf(response.clone())) {
+    clearCsrfToken()
+    const retryToken = await ensureCsrfToken()
+    response = await fetch(apiUrl(url), {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'X-XSRF-TOKEN': retryToken,
+      },
+      body,
+    })
+  }
+
+  if (response.status === 401) {
+    throw new AuthRequiredError()
+  }
+
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response))
+  }
+
+  const text = await response.text()
+
+  return text ? JSON.parse(text) as T : undefined as T
+}
+
 export function getDashboard() {
   return getJson<DashboardSummary>('/api/v1/dashboard')
 }
@@ -660,6 +746,10 @@ export function createUser(request: CreateUserRequest) {
 
 export function updateUserStatus(id: string, request: UpdateUserStatusRequest) {
   return putJson<UserListItem>(`/api/v1/users/${encodeURIComponent(id)}/status`, request)
+}
+
+export function updateUserSidebar(id: string, request: UpdateUserSidebarRequest) {
+  return putJson<UserListItem>(`/api/v1/users/${encodeURIComponent(id)}/sidebar`, request)
 }
 
 export function resendUserInvitation(id: string) {
@@ -745,6 +835,22 @@ export function generateLoanActions(loanNumber: string, templateId: string) {
   return postJson<GenerateLoanActionsResponse>(`/api/v1/loans/${encodeURIComponent(loanNumber)}/generate-actions`, {
     templateId,
   })
+}
+
+export function previewLoanImport(file: File, templateId: string) {
+  const body = new FormData()
+  body.append('file', file)
+  body.append('templateId', templateId)
+
+  return postForm<ImportPreviewResponse>('/api/v1/import/loan-files/preview', body)
+}
+
+export function getLoanImport(batchId: string) {
+  return getJson<ImportPreviewResponse>(`/api/v1/import/loan-files/${encodeURIComponent(batchId)}`)
+}
+
+export function commitLoanImport(batchId: string) {
+  return postJson<ImportCommitResponse>(`/api/v1/import/loan-files/${encodeURIComponent(batchId)}/commit`, {})
 }
 
 export function completeAction(publicId: string) {

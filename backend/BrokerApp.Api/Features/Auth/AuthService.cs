@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
+using System.Text.Json;
 
 namespace BrokerApp.Api.Features.Auth;
 
@@ -22,6 +23,19 @@ public interface IAuthService
 
 public sealed class AuthService : IAuthService
 {
+    private static readonly string[] DefaultVisibleSidebarItems =
+    [
+        "home",
+        "triage",
+        "dashboard",
+        "loans",
+        "customers",
+        "import",
+        "reports",
+        "admin",
+        "account"
+    ];
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly BrokerAppDbContext _dbContext;
     private readonly UserManager<AppUser> _userManager;
     private readonly SignInManager<AppUser> _signInManager;
@@ -241,8 +255,27 @@ public sealed class AuthService : IAuthService
                 user.Email ?? string.Empty,
                 user.Role,
                 user.IsActive,
-                user.EmailConfirmed))
+                user.EmailConfirmed,
+                VisibleSidebarItems(user.VisibleSidebarItemsJson)))
             .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    private static IReadOnlyCollection<string> VisibleSidebarItems(string? visibleSidebarItemsJson)
+    {
+        if (string.IsNullOrWhiteSpace(visibleSidebarItemsJson))
+        {
+            return DefaultVisibleSidebarItems;
+        }
+
+        try
+        {
+            var values = JsonSerializer.Deserialize<IReadOnlyCollection<string>>(visibleSidebarItemsJson, JsonOptions);
+            return values is null || values.Count == 0 ? DefaultVisibleSidebarItems : values;
+        }
+        catch (JsonException)
+        {
+            return DefaultVisibleSidebarItems;
+        }
     }
 
     private string BuildFrontendLink(string path, params (string Name, string Value)[] values)
