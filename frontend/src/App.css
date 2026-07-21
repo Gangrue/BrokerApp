@@ -3949,163 +3949,202 @@ select {
   overflow-wrap: anywhere;
 }
 
+.triage-mode .workspace {
+  min-height: 100vh;
+  padding: 0;
+}
+
 .triage-page {
+  position: relative;
   display: grid;
-  gap: 18px;
+  min-height: 100vh;
   min-width: 0;
-}
-
-.triage-status-panel {
-  align-items: center;
-  display: grid;
-  gap: 18px;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.28fr);
-}
-
-.triage-kicker {
-  color: var(--color-primary);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.triage-status-panel h2,
-.triage-empty-panel h2 {
-  margin: 4px 0 6px;
-}
-
-.triage-status-panel p,
-.triage-empty-panel p {
-  color: var(--color-text-muted);
-  margin: 0;
+  padding: 46px;
+  color: var(--workspace-foreground);
 }
 
 .triage-ahead-card {
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  display: grid;
-  gap: 4px;
-  justify-items: center;
-  padding: 16px;
-  text-align: center;
+  position: absolute;
+  top: 36px;
+  left: 42px;
+  z-index: 1;
+  width: max-content;
+  max-width: calc(100% - 84px);
+  border: 1px solid rgba(245, 240, 230, 0.2);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 15px;
+  background: rgba(251, 248, 241, 0.1);
+  color: var(--workspace-foreground);
+  box-shadow: 0 10px 26px rgba(20, 25, 21, 0.14);
+  backdrop-filter: blur(10px);
 }
 
-.triage-ahead-card strong {
-  font-size: 36px;
+.triage-ahead-card span {
+  color: inherit;
+  font-size: 14px;
+  font-weight: 800;
 }
 
 .triage-ahead-card.ahead {
-  background: var(--color-success-bg);
-  color: var(--color-success-text);
+  border-color: color-mix(in srgb, var(--color-primary) 52%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
 }
 
 .triage-ahead-card.today {
-  background: var(--color-info-bg);
-  color: var(--color-info-text);
+  border-color: rgba(245, 240, 230, 0.28);
+  background: rgba(251, 248, 241, 0.12);
 }
 
 .triage-ahead-card.behind {
-  background: var(--color-warning-bg);
-  color: var(--color-warning-text);
+  border-color: color-mix(in srgb, var(--color-accent) 64%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 25%, transparent);
 }
 
-.triage-work-panel {
+.triage-question-wrap {
+  align-self: center;
+  justify-self: center;
   display: grid;
-  gap: 18px;
-}
-
-.triage-action-summary {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-
-.triage-action-summary article {
-  background: var(--color-surface-muted);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-  padding: 12px;
-}
-
-.triage-action-summary span {
-  color: var(--color-text-muted);
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.triage-action-summary strong {
-  overflow-wrap: anywhere;
-}
-
-.triage-progress-track {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.triage-progress-track span {
-  background: var(--color-surface-muted);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  color: var(--color-text-muted);
-  font-size: 12px;
-  font-weight: 800;
-  padding: 9px 12px;
+  gap: 34px;
+  width: min(1060px, 100%);
+  padding: 48px 20px 110px;
   text-align: center;
-  text-transform: uppercase;
 }
 
-.triage-progress-track span.active {
-  background: var(--color-success-bg);
-  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
-  color: var(--color-success-text);
+.triage-question-wrap small {
+  color: rgba(245, 240, 230, 0.68);
+  font-size: 14px;
+  font-weight: 800;
 }
 
-.triage-prompt-card {
-  background: var(--color-surface-muted);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
+.triage-question-wrap h2 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(42px, 7vw, 86px);
+  font-weight: 800;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+
+.triage-word-button {
+  display: inline;
+  width: auto;
+  padding: 0 0.05em;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #fff;
+  box-shadow: inset 0 -0.09em 0 color-mix(in srgb, var(--color-accent) 80%, transparent);
+  font: inherit;
+  text-align: inherit;
+  text-decoration: none;
+}
+
+.triage-word-button:hover {
+  background: transparent;
+  color: var(--color-sidebar-active);
+  box-shadow: inset 0 -0.13em 0 var(--color-accent);
+  transform: none;
+}
+
+.triage-answer-actions {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.triage-answer-actions button {
+  min-width: 132px;
+  padding: 14px 24px;
+  border: 1px solid rgba(245, 240, 230, 0.16);
+  border-radius: 999px;
+  box-shadow: 0 16px 34px rgba(20, 25, 21, 0.2);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.triage-answer-actions .secondary,
+.triage-bottom-actions .secondary {
+  background: rgba(251, 248, 241, 0.11);
+  color: #fff;
+  border-color: rgba(245, 240, 230, 0.22);
+}
+
+.triage-answer-actions .secondary:hover,
+.triage-bottom-actions .secondary:hover {
+  background: rgba(251, 248, 241, 0.18);
+  color: #fff;
+}
+
+.triage-bottom-actions {
+  position: absolute;
+  right: 42px;
+  bottom: 36px;
+  left: 42px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.triage-bottom-actions button {
+  border-radius: 999px;
+  padding: 12px 18px;
+}
+
+.triage-context-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
   display: grid;
-  gap: 12px;
-  padding: 18px;
+  place-items: center;
+  padding: 22px;
 }
 
-.triage-prompt-card > span {
+.triage-context-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border-radius: 0;
+  background: rgba(20, 25, 21, 0.54);
+  box-shadow: none;
+  backdrop-filter: blur(4px);
+}
+
+.triage-context-popover {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 10px;
+  width: min(460px, 100%);
+  padding: 24px;
+  border: 1px solid rgba(245, 240, 230, 0.28);
+  border-radius: 12px;
+  background: rgba(251, 248, 241, 0.96);
+  color: var(--color-text);
+  box-shadow: 0 28px 80px rgba(20, 25, 21, 0.34);
+}
+
+.triage-context-popover span {
   color: var(--color-primary);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
   text-transform: uppercase;
 }
 
-.triage-prompt-card h3,
-.triage-prompt-card p {
+.triage-context-popover h3,
+.triage-context-popover p {
   margin: 0;
 }
 
-.triage-prompt-card p {
+.triage-context-popover p {
   color: var(--color-text-muted);
 }
 
-.triage-prompt-actions,
-.triage-footer-actions {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.triage-footer-actions {
-  justify-content: space-between;
-}
-
-.triage-footer-actions small {
-  color: var(--color-text-muted);
-  font-weight: 700;
+.triage-context-popover button {
+  justify-self: start;
+  margin-top: 8px;
 }
 
 @media (max-width: 760px) {
@@ -4118,6 +4157,41 @@ select {
 
   .import-table {
     min-width: 680px;
+  }
+
+  .triage-page {
+    min-height: calc(100vh - 0px);
+    padding: 28px 18px;
+  }
+
+  .triage-ahead-card {
+    top: 18px;
+    left: 18px;
+    max-width: calc(100% - 36px);
+  }
+
+  .triage-question-wrap {
+    gap: 24px;
+    padding: 84px 0 120px;
+  }
+
+  .triage-question-wrap h2 {
+    font-size: clamp(38px, 12vw, 58px);
+  }
+
+  .triage-answer-actions {
+    display: grid;
+  }
+
+  .triage-answer-actions button {
+    width: min(280px, 100%);
+    justify-self: center;
+  }
+
+  .triage-bottom-actions {
+    right: 18px;
+    bottom: 22px;
+    left: 18px;
   }
 }
 

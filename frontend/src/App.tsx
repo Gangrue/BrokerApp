@@ -766,8 +766,8 @@ function App() {
   const [triageActionIndex, setTriageActionIndex] = useState(0)
   const [triageStepIndex, setTriageStepIndex] = useState(0)
   const [triageReachedOutActionIds, setTriageReachedOutActionIds] = useState<string[]>([])
-  const [triageCompletedActionIds, setTriageCompletedActionIds] = useState<string[]>([])
-  const [triageSkippedActionIds, setTriageSkippedActionIds] = useState<string[]>([])
+  const [, setTriageCompletedActionIds] = useState<string[]>([])
+  const [, setTriageSkippedActionIds] = useState<string[]>([])
   const [authView, setAuthView] = useState<AuthView>(() => initialAuthView())
   const [authError, setAuthError] = useState<string | null>(null)
   const [authMessage, setAuthMessage] = useState<string | null>(null)
@@ -2680,7 +2680,7 @@ function App() {
 
   return (
     <>
-    <main className={`app-shell ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`} onClickCapture={handleWorkspaceClickCapture}>
+    <main className={`app-shell ${isSidebarCollapsed ? 'sidebar-collapsed' : ''} ${view === 'triage' ? 'triage-mode' : ''}`} onClickCapture={handleWorkspaceClickCapture}>
       <aside className="sidebar" aria-label="Primary">
         <button
           aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -2722,6 +2722,7 @@ function App() {
       </aside>
 
       <section className="workspace" id="dashboard">
+        {view !== 'triage' && (
         <header className="topbar">
           <div className="topbar-title" key={view}>
             <p className="eyebrow">{view === 'intake' ? 'File intake' : view === 'import' ? 'Spreadsheet import' : view === 'home' ? 'Workspace home' : 'Daily workflow'}</p>
@@ -2740,7 +2741,6 @@ function App() {
             {view === 'faq' && 'FAQ'}
             {view === 'intake' && 'New file intake'}
             {view === 'import' && 'Import files'}
-            {view === 'triage' && 'Processor morning triage'}
             </h1>
           </div>
           <div className="topbar-actions">
@@ -2769,6 +2769,7 @@ function App() {
             )}
           </div>
         </header>
+        )}
 
         {view !== 'home' && view !== 'intake' && view !== 'import' && view !== 'triage' && view !== 'account' && view !== 'contact' && view !== 'faq' && view !== 'admin' && view !== 'loanDetail' && view !== 'customerDetail' && view !== 'actionDetail' && (
           <section className="metrics" aria-label="Action summary">
@@ -2877,11 +2878,9 @@ function App() {
           <ProcessorMorningTriagePage
             action={currentTriageAction}
             actionIndex={currentTriageActionIndex}
-            completedCount={triageCompletedActionIds.length}
             disabled={isMutating}
             reachedOutActionIds={triageReachedOutActionIds}
             scheduleStatus={triageScheduleStatus}
-            skippedCount={triageSkippedActionIds.length}
             stepIndex={triageStepIndex}
             totalActions={triageActions.length}
             onCompleteAction={completeTriageAction}
@@ -3392,11 +3391,9 @@ function DashboardAlertList({
 function ProcessorMorningTriagePage({
   action,
   actionIndex,
-  completedCount,
   disabled,
   reachedOutActionIds,
   scheduleStatus,
-  skippedCount,
   stepIndex,
   totalActions,
   onCompleteAction,
@@ -3407,11 +3404,9 @@ function ProcessorMorningTriagePage({
 }: {
   action: DashboardAction | null
   actionIndex: number
-  completedCount: number
   disabled: boolean
   reachedOutActionIds: string[]
   scheduleStatus: TriageScheduleStatus
-  skippedCount: number
   stepIndex: number
   totalActions: number
   onCompleteAction: () => void
@@ -3424,116 +3419,113 @@ function ProcessorMorningTriagePage({
   const hasReachedOut = action ? reachedOutActionIds.includes(action.id) : false
   const canGoPrevious = actionIndex > 0 || stepIndex > 0
   const canGoNext = Boolean(action) && (stepIndex < triageSteps.length - 1 || actionIndex < totalActions - 1)
+  const [contextPopup, setContextPopup] = useState<null | 'action' | 'contact'>(null)
 
   if (!action) {
     return (
       <section className="triage-page">
-        <section className="panel triage-empty-panel">
-          <span className="triage-kicker">Processor Morning Triage</span>
-          <h2>All caught up</h2>
-          <p>No open action items are available in the queue.</p>
-        </section>
+        <div className={`triage-ahead-card ${scheduleStatus.tone}`}>
+          <span>{scheduleStatus.label}</span>
+        </div>
+        <div className="triage-question-wrap">
+          <h2>All caught up.</h2>
+        </div>
       </section>
     )
   }
 
+  const contactTarget = action.section === 'Borrower' ? action.borrowerName : action.section
+  const aheadText = scheduleStatus.tone === 'today'
+    ? "You're working on today's queue."
+    : `You are ${scheduleStatus.caption}.`
+  const stepLabel = `Action ${actionIndex + 1} of ${totalActions}`
+  const actionTerm = (
+    <button className="triage-word-button" type="button" onClick={() => setContextPopup('action')}>
+      {action.title}
+    </button>
+  )
+  const contactTerm = (
+    <button className="triage-word-button" type="button" onClick={() => setContextPopup('contact')}>
+      {contactTarget}
+    </button>
+  )
+
   return (
     <section className="triage-page">
-      <section className="panel triage-status-panel">
-        <div>
-          <span className="triage-kicker">Processor Morning Triage</span>
-          <h2>{scheduleStatus.label}</h2>
-          <p>{scheduleStatus.description}</p>
-        </div>
-        <div className={`triage-ahead-card ${scheduleStatus.tone}`}>
-          <strong>{scheduleStatus.value}</strong>
-          <span>{scheduleStatus.caption}</span>
-        </div>
-      </section>
+      <div className={`triage-ahead-card ${scheduleStatus.tone}`}>
+        <span>{aheadText}</span>
+      </div>
 
-      <section className="panel triage-work-panel">
-        <div className="panel-header">
-          <div>
-            <h2>{action.title}</h2>
-            <p>Action {actionIndex + 1} of {totalActions}</p>
+      <div className="triage-question-wrap">
+        <small>{stepLabel}</small>
+        {step === 'Review' && (
+          <>
+            <h2>
+              Ready to work on {actionTerm} for {contactTerm}?
+            </h2>
+            <div className="triage-answer-actions">
+              <button disabled={disabled} type="button" onClick={onNext}>Yes</button>
+            </div>
+          </>
+        )}
+
+        {step === 'Outreach' && (
+          <>
+            <h2>
+              Have you discussed {actionTerm} with {contactTerm}?
+            </h2>
+            <div className="triage-answer-actions">
+              <button disabled={disabled || hasReachedOut} type="button" onClick={onReachedOutYes}>
+                {hasReachedOut ? 'Already noted' : 'Yes'}
+              </button>
+              <button className="secondary" disabled={disabled} type="button" onClick={onReachedOutNo}>No</button>
+            </div>
+          </>
+        )}
+
+        {step === 'Complete' && (
+          <>
+            <h2>
+              Is {actionTerm} complete?
+            </h2>
+            <div className="triage-answer-actions">
+              <button disabled={disabled} type="button" onClick={onCompleteAction}>Complete</button>
+              <button className="secondary" disabled={disabled} type="button" onClick={onNext}>No</button>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="triage-bottom-actions">
+        <button className="secondary" disabled={disabled || !canGoPrevious} type="button" onClick={onPrevious}>
+          Go Back
+        </button>
+        <button className="secondary" disabled={disabled || !canGoNext} type="button" onClick={onNext}>
+          Skip step
+        </button>
+      </div>
+
+      {contextPopup && (
+        <div className="triage-context-overlay" role="dialog" aria-modal="true" aria-label="Triage context">
+          <button className="triage-context-backdrop" type="button" aria-label="Close context" onClick={() => setContextPopup(null)} />
+          <div className="triage-context-popover">
+            {contextPopup === 'action' ? (
+              <>
+                <span>{action.bucket} - {action.priority}</span>
+                <h3>{action.title}</h3>
+                <p>{formatDateLabel(action.dueDate)} - Loan {action.loanNumber}</p>
+              </>
+            ) : (
+              <>
+                <span>{action.section}</span>
+                <h3>{contactTarget}</h3>
+                <p>{action.borrowerName} - Loan {action.loanNumber}</p>
+              </>
+            )}
+            <button type="button" onClick={() => setContextPopup(null)}>Close</button>
           </div>
-          <span className={`status ${action.bucket === 'Overdue' ? 'danger' : action.bucket === 'Due Today' ? 'warning' : ''}`}>
-            {action.bucket}
-          </span>
         </div>
-
-        <div className="triage-action-summary">
-          <article>
-            <span>Borrower</span>
-            <strong>{action.borrowerName}</strong>
-          </article>
-          <article>
-            <span>Loan</span>
-            <strong>{action.loanNumber}</strong>
-          </article>
-          <article>
-            <span>Section</span>
-            <strong>{action.section}</strong>
-          </article>
-          <article>
-            <span>Due</span>
-            <strong>{formatDateLabel(action.dueDate)}</strong>
-          </article>
-          <article>
-            <span>Priority</span>
-            <strong>{action.priority}</strong>
-          </article>
-        </div>
-
-        <div className="triage-progress-track" aria-label="Triage steps">
-          {triageSteps.map((item, index) => (
-            <span className={index <= stepIndex ? 'active' : ''} key={item}>
-              {item}
-            </span>
-          ))}
-        </div>
-
-        <section className="triage-prompt-card">
-          {step === 'Review' && (
-            <>
-              <span>Step 1</span>
-              <h3>Review this action and loan context.</h3>
-              <p>Confirm the borrower, loan number, section, due date, and priority before taking action.</p>
-              <button disabled={disabled} type="button" onClick={onNext}>Next</button>
-            </>
-          )}
-
-          {step === 'Outreach' && (
-            <>
-              <span>Step 2</span>
-              <h3>Have you reached out to {action.section}?</h3>
-              <p>{hasReachedOut ? 'Outreach has already been noted for this triage pass.' : 'Answering yes will add a note to this action.'}</p>
-              <div className="triage-prompt-actions">
-                <button disabled={disabled || hasReachedOut} type="button" onClick={onReachedOutYes}>Yes</button>
-                <button className="secondary" disabled={disabled} type="button" onClick={onReachedOutNo}>No</button>
-              </div>
-            </>
-          )}
-
-          {step === 'Complete' && (
-            <>
-              <span>Step 3</span>
-              <h3>Have you completed this action?</h3>
-              <p>Answering yes completes the action and removes it from the open queue after refresh.</p>
-              <div className="triage-prompt-actions">
-                <button disabled={disabled} type="button" onClick={onCompleteAction}>Yes, complete</button>
-                <button className="secondary" disabled={disabled} type="button" onClick={onNext}>No, next action</button>
-              </div>
-            </>
-          )}
-        </section>
-
-        <div className="triage-footer-actions">
-          <button className="secondary" disabled={disabled || !canGoPrevious} type="button" onClick={onPrevious}>Previous</button>
-          <small>{completedCount} completed, {skippedCount} skipped this session</small>
-          <button className="secondary" disabled={disabled || !canGoNext} type="button" onClick={onNext}>Next</button>
-        </div>
-      </section>
+      )}
     </section>
   )
 }
